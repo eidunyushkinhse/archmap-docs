@@ -1,12 +1,14 @@
 // Сервер: читателю — сайт без следов авторского режима; автору — вход по скрытому адресу,
-// редактор и API правок с пересборкой.
+// редактор и API правок с пересборкой и автокоммитом.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { hashPassword } from "./auth.ts";
+import { cleanGitEnv } from "./git.ts";
 import { THEME_DIR } from "./paths.ts";
 import { slugFromTitle, startServer, type DocsServer } from "./server.ts";
 
@@ -72,6 +74,7 @@ describe("сервер документации", () => {
     assert.equal((await get("/nope/")).status, 404);
     assert.equal((await get("/edit/")).status, 302);
     assert.equal((await get("/api/tree")).status, 401);
+    assert.equal((await get("/api/git")).status, 401);
     assert.deepEqual(await (await get("/api/me")).json(), { author: false });
   });
 
@@ -121,6 +124,10 @@ describe("сервер документации", () => {
     const r = await (await call("PUT", "/api/page", { file: "user/b.md", title: "Страница Бэ", description: "Описание", order: 5, body: "## Тут\n\nновый текст" })).json();
     assert.equal(r.url, "/user/b/");
     assert.deepEqual(r.errors, []);
+    // Временная папка не в рабочей копии git — автокоммит выключен, ответ это говорит
+    assert.equal(r.commit, null);
+    assert.equal(r.gitError, null);
+    assert.equal(r.git.enabled, false);
     assert.equal(readFileSync(join(root, "content/user/b.md"), "utf8"), "---\ntitle: Страница Бэ\norder: 5\ndescription: Описание\n---\n\n## Тут\n\nновый текст\n");
     assert.match(await (await get("/user/b/")).text(), /Страница Бэ.*новый текст/s);
     // Битая ссылка после правки — ошибка в ответе, но сайт живёт
@@ -171,5 +178,86 @@ describe("сервер документации", () => {
     assert.equal(slugFromTitle("Навигация по проекту"), "navigatsiya-po-proektu");
     assert.equal(slugFromTitle("Docker Compose: установка!"), "docker-compose-ustanovka");
     assert.equal(slugFromTitle("***"), "page");
+  });
+});
+
+describe("сервер с автокоммитом", () => {
+  let root = "";
+  let work = "";
+  let srv2: DocsServer;
+  let base2 = "";
+  let cookie2 = "";
+  const git = (cwd: string, ...args: string[]): string => execFileSync("git", args, { cwd, encoding: "utf8", env: cleanGitEnv() }).trim();
+  const call2 = (method: string, path: string, body?: unknown) =>
+    fetch(base2 + path, {
+      method,
+      headers: { cookie: cookie2, "x-requested-with": "docs", "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+  before(async () => {
+    root = tree({
+      "work/content/index.md": "---\ntitle: Документация\n---\nглавная\n",
+      "work/content/user/index.md": "---\ntitle: Руководство\nshort: Пользователь\norder: 1\n---\n",
+      "work/content/user/a.md": "---\ntitle: А\n---\nтекст\n",
+    });
+    work = join(root, "work");
+    const remote = join(root, "remote.git");
+    git(root, "init", "-q", "--bare", "-b", "main", remote);
+    git(work, "init", "-q", "-b", "main");
+    git(work, "add", "-A");
+    git(work, "-c", "user.name=Тест", "-c", "user.email=t@example.com", "commit", "-q", "-m", "начало");
+    git(work, "remote", "add", "origin", remote);
+    git(work, "push", "-q", "-u", "origin", "main");
+    srv2 = await startServer({
+      contentDir: join(work, "content"),
+      themeDir: THEME_DIR,
+      distDir: join(root, "dist"),
+      dataDir: join(root, "data"),
+      port: 0,
+      auth: { passwordHash: hashPassword(PASSWORD), secret: randomBytes(32) },
+      quiet: true,
+      git: { dir: join(work, "content"), push: true, authorName: "Автор", authorEmail: "a@example.com" },
+    });
+    base2 = `http://127.0.0.1:${srv2.port}`;
+    const ok = await fetch(`${base2}/login`, { method: "POST", body: new URLSearchParams({ password: PASSWORD }), redirect: "manual" });
+    cookie2 = ok.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+  });
+  after(async () => {
+    await srv2.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("правка, раздел, удаление и картинка — по коммиту с понятным сообщением; всё отправлено в remote", async () => {
+    const r = await (await call2("PUT", "/api/page", { file: "user/a.md", title: "А-я", body: "новый" })).json();
+    assert.equal(r.commit.message, "Правка «А-я» (user/a.md)");
+    assert.match(r.commit.hash, /^[0-9a-f]{7,}$/);
+    assert.equal(r.gitError, null);
+    assert.equal(r.git.enabled, true);
+    assert.equal(r.git.push, true);
+    const c = await (await call2("POST", "/api/page", { kind: "section", parent: "user/", slug: "sec", title: "Раздел" })).json();
+    assert.equal(c.commit.message, "Новый раздел «Раздел» (user/sec/index.md)");
+    const d = await (await call2("DELETE", "/api/page?file=user%2Fsec%2Findex.md")).json();
+    assert.equal(d.commit.message, "Удалена страница «Раздел» (user/sec/index.md)");
+    const up = await fetch(`${base2}/api/upload?name=pic.png`, { method: "POST", headers: { cookie: cookie2, "x-requested-with": "docs" }, body: Buffer.from("89504e47", "hex") });
+    assert.equal((await up.json()).commit.message, "Картинка images/pic.png");
+    // Повтор без изменений — коммита нет, но и ошибки нет
+    const same = await (await call2("PUT", "/api/page", { file: "user/a.md", title: "А-я", body: "новый" })).json();
+    assert.equal(same.commit, null);
+    assert.equal(same.gitError, null);
+    await srv2.git.flush();
+    const s = await (await fetch(`${base2}/api/git`, { headers: { cookie: cookie2 } })).json();
+    assert.equal(s.pending, 0);
+    assert.equal(s.pushError, null);
+    assert.equal(s.last.message, "Картинка images/pic.png");
+    assert.equal(git(work, "status", "--porcelain"), "");
+    assert.equal(git(work, "log", "-1", "--format=%an <%ae>"), "Автор <a@example.com>");
+    assert.deepEqual(git(join(root, "remote.git"), "log", "--format=%s").split("\n"), [
+      "Картинка images/pic.png",
+      "Удалена страница «Раздел» (user/sec/index.md)",
+      "Новый раздел «Раздел» (user/sec/index.md)",
+      "Правка «А-я» (user/a.md)",
+      "начало",
+    ]);
   });
 });

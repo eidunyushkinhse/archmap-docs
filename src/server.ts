@@ -1,6 +1,7 @@
 // Сервер документации: отдаёт собранный сайт, держит авторский режим (скрытый вход /login,
 // редактор /edit/, API правок) и пересобирает dist/ после каждой правки — своей через API
-// или чужой на диске (git pull, правка в редакторе кода).
+// или чужой на диске (git pull, правка в редакторе кода). Правки через API коммитятся в git
+// (git.ts), при DOCS_GIT_PUSH — отправляются в удалённый репозиторий.
 //   node src/server.ts                 — сервер (DOCS_PORT, по умолчанию 8800)
 //   node src/server.ts --dev           — плюс перезагрузка открытых вкладок при пересборке
 //   node src/server.ts --set-password  — задать пароль автора (хэш пишется в .env)
@@ -15,6 +16,7 @@ import {
 } from "./auth.ts";
 import { makeReader } from "./content.ts";
 import { fmNumber, fmString, splitFrontMatter } from "./frontmatter.ts";
+import { createAutoCommitter, disabledCommitter, type AutoCommitter, type CommitInfo, type GitOptions, type GitStatus } from "./git.ts";
 import { createRenderer, DocsError, pageUrl } from "./markdown.ts";
 import { CONTENT_DIR, DATA_DIR, DIST_DIR, PKG_DIR, THEME_DIR } from "./paths.ts";
 import { renderEditor, renderLogin, SITE, type Assets } from "./render.ts";
@@ -32,6 +34,9 @@ export interface ServerOptions {
   auth?: AuthConfig;
   trustProxy?: boolean;   // адрес клиента и схема — из X-Forwarded-* (за nginx)
   quiet?: boolean;
+  // Автокоммит правок через API: по умолчанию — автоопределение рабочей копии по contentDir;
+  // false — выключен
+  git?: GitOptions | false;
 }
 
 export interface RebuildResult {
@@ -39,9 +44,18 @@ export interface RebuildResult {
   warnings: string[];
 }
 
+// Что ответ мутации говорит о git: коммит (null — выключен, нечего коммитить или не удался),
+// текст ошибки коммита и состояние отправки
+export interface Committed {
+  commit: CommitInfo | null;
+  gitError: string | null;
+  git: GitStatus;
+}
+
 export interface DocsServer {
   server: Server;
   port: number;
+  git: AutoCommitter;
   rebuild(): RebuildResult;
   close(): Promise<void>;
 }
@@ -213,6 +227,21 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
   };
   const watchers = [opts.contentDir, opts.themeDir].map((d) => watch(d, { recursive: true }, schedule));
 
+  // Автокоммит правок через API; ошибка коммита не отменяет сохранение — файл уже на диске
+  const git: AutoCommitter = opts.git === false
+    ? disabledCommitter()
+    : await createAutoCommitter({ ...(opts.git ?? { dir: opts.contentDir }), log });
+  const committed = async (message: string): Promise<Committed> => {
+    try {
+      return { commit: await git.commit(message), gitError: null, git: git.status() };
+    } catch (e) {
+      const text = e instanceof Error ? e.message : String(e);
+      log(`git: коммит не удался — ${text}`);
+      return { commit: null, gitError: text, git: git.status() };
+    }
+  };
+  const label = (file: string, title: string): string => (title ? `«${title}» (${file})` : file);
+
   const clientIp = (req: IncomingMessage): string => {
     const fwd = opts.trustProxy ? req.headers["x-forwarded-for"] : undefined;
     const first = Array.isArray(fwd) ? fwd[0] : fwd?.split(",")[0];
@@ -340,7 +369,7 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
     };
   };
 
-  const savePage = (input: Record<string, unknown>): { url: string | null } & RebuildResult => {
+  const savePage = async (input: Record<string, unknown>): Promise<{ url: string | null } & RebuildResult & Committed> => {
     const file = checkFile(input.file);
     const abs = absFile(file);
     if (!existsSync(abs)) throw new HttpError(404, "файла нет — создайте страницу");
@@ -360,10 +389,10 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
     const text = (Object.keys(fm).length ? `${serializeFrontMatter(fm)}\n` : "") + body + "\n";
     writeFileSync(abs, text);
     const r = rebuild();
-    return { url: isFragment(file) ? null : pageUrl(file), ...r };
+    return { url: isFragment(file) ? null : pageUrl(file), ...r, ...(await committed(`Правка ${label(file, title)}`)) };
   };
 
-  const createPage = (input: Record<string, unknown>): { file: string; url: string | null } & RebuildResult => {
+  const createPage = async (input: Record<string, unknown>): Promise<{ file: string; url: string | null } & RebuildResult & Committed> => {
     const kind = input.kind;
     const slug = typeof input.slug === "string" ? input.slug : "";
     if (!SLUG_RE.test(slug)) throw new HttpError(400, "адрес — латиница, цифры и дефис");
@@ -386,10 +415,11 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, kind === "fragment" ? `## ${title}\n\n` : `${serializeFrontMatter(fm)}\n`);
     const r = rebuild();
-    return { file, url: kind === "fragment" ? null : pageUrl(file), ...r };
+    const what = kind === "fragment" ? "Новый фрагмент" : kind === "section" ? "Новый раздел" : "Новая страница";
+    return { file, url: kind === "fragment" ? null : pageUrl(file), ...r, ...(await committed(`${what} ${label(file, title)}`)) };
   };
 
-  const deletePage = (file: string): RebuildResult => {
+  const deletePage = async (file: string): Promise<RebuildResult & Committed> => {
     if (file === "index.md") throw new HttpError(400, "главную страницу удалить нельзя");
     const abs = absFile(file);
     if (!existsSync(abs)) throw new HttpError(404, "файла нет");
@@ -398,10 +428,12 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
       const others = readdirSync(dir).filter((n) => n !== "index.md");
       if (others.length) throw new HttpError(409, "сначала удалите страницы внутри раздела");
     }
+    const title = fmString(splitFrontMatter(readFileSync(abs, "utf8")).fm, "title") ?? "";
     unlinkSync(abs);
     const dir = dirname(abs);
     if (dir !== opts.contentDir && readdirSync(dir).length === 0) rmdirSync(dir);
-    return rebuild();
+    const r = rebuild();
+    return { ...r, ...(await committed(`${isFragment(file) ? "Удалён фрагмент" : "Удалена страница"} ${label(file, title)}`)) };
   };
 
   // Предпросмотр: рендер текста в контексте файла и проверка ссылок по текущему сайту
@@ -433,7 +465,7 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
     }
   };
 
-  const upload = async (req: IncomingMessage, url: URL): Promise<{ path: string; markdown: string }> => {
+  const upload = async (req: IncomingMessage, url: URL): Promise<{ path: string; markdown: string } & Committed> => {
     const raw = basename(url.searchParams.get("name") ?? "image.png").toLowerCase();
     const ext = extname(raw);
     if (!IMAGE_EXT.has(ext)) throw new HttpError(400, "можно загружать png, jpg, webp, gif и svg");
@@ -445,7 +477,7 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
     const data = await readBody(req, 8 * 1024 * 1024);
     if (!data.length) throw new HttpError(400, "пустой файл");
     writeFileSync(join(dir, name), data);
-    return { path: `images/${name}`, markdown: `![Описание картинки](/images/${name} "Подпись")` };
+    return { path: `images/${name}`, markdown: `![Описание картинки](/images/${name} "Подпись")`, ...(await committed(`Картинка images/${name}`)) };
   };
 
   const api = async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> => {
@@ -462,10 +494,11 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
       });
     }
     if (route === "GET /api/page") return json(res, 200, readPage(checkFile(url.searchParams.get("file"))));
+    if (route === "GET /api/git") return json(res, 200, git.status());
     if (method !== "GET") requireMutation(req);
-    if (route === "PUT /api/page") return json(res, 200, savePage(JSON.parse((await readBody(req, 2 * 1024 * 1024)).toString("utf8"))));
-    if (route === "POST /api/page") return json(res, 201, createPage(JSON.parse((await readBody(req, 64 * 1024)).toString("utf8"))));
-    if (route === "DELETE /api/page") return json(res, 200, deletePage(checkFile(url.searchParams.get("file"))));
+    if (route === "PUT /api/page") return json(res, 200, await savePage(JSON.parse((await readBody(req, 2 * 1024 * 1024)).toString("utf8"))));
+    if (route === "POST /api/page") return json(res, 201, await createPage(JSON.parse((await readBody(req, 64 * 1024)).toString("utf8"))));
+    if (route === "DELETE /api/page") return json(res, 200, await deletePage(checkFile(url.searchParams.get("file"))));
     if (route === "POST /api/preview") return json(res, 200, preview(JSON.parse((await readBody(req, 2 * 1024 * 1024)).toString("utf8"))));
     if (route === "POST /api/upload") return json(res, 201, await upload(req, url));
     throw new HttpError(404, "нет такого метода");
@@ -519,12 +552,14 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
   return {
     server,
     port,
+    git,
     rebuild,
-    close: () => new Promise<void>((ok, fail) => {
+    close: async () => {
       for (const w of watchers) w.close();
       if (timer) clearTimeout(timer);
-      server.close((e) => (e ? fail(e) : ok()));
-    }),
+      await git.flush();
+      await new Promise<void>((ok, fail) => server.close((e) => (e ? fail(e) : ok())));
+    },
   };
 }
 
@@ -597,6 +632,13 @@ async function main(): Promise<void> {
     host: values.host ?? process.env.DOCS_HOST ?? "127.0.0.1",
     dev: values.dev,
     trustProxy: process.env.DOCS_TRUST_PROXY === "true",
+    git: process.env.DOCS_GIT_AUTOCOMMIT === "false" ? false : {
+      dir: CONTENT_DIR,
+      push: process.env.DOCS_GIT_PUSH === "true",
+      remote: process.env.DOCS_GIT_REMOTE || undefined,
+      authorName: process.env.DOCS_GIT_NAME || undefined,
+      authorEmail: process.env.DOCS_GIT_EMAIL || undefined,
+    },
   });
 }
 

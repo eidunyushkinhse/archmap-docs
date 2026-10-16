@@ -55,6 +55,33 @@
     if (dirty) { ev.preventDefault(); ev.returnValue = ""; }
   });
 
+  // ── Автокоммит: подпись к статусу и ожидание отправки в удалённый репозиторий ─────
+  const gitNote = (r) => {
+    if (!r.git || !r.git.enabled) return "";
+    if (r.gitError) return " · коммит не прошёл: " + r.gitError;
+    if (!r.commit) return "";
+    return " · коммит " + r.commit.hash + (r.git.push ? (r.git.pending ? " · отправляю…" : " · отправлено") : "");
+  };
+  let pushWatch = 0;
+  const watchPush = (r) => {
+    if (!r.git || !r.git.push || !r.git.pending || r.gitError) return;
+    const id = ++pushWatch;
+    const base = status.textContent.replace(/ · отправляю…$/, "");
+    const tick = async (n) => {
+      if (id !== pushWatch || dirty) return;
+      let s;
+      try { s = await api("GET", "/api/git"); } catch { return; }
+      if (s.pushError) {
+        status.textContent = base + " · не отправлено: " + s.pushError;
+        status.className = "ed-status dirty";
+        return;
+      }
+      if (!s.pending) { status.textContent = base + " · отправлено"; return; }
+      if (n < 90) setTimeout(() => tick(n + 1), 1000);
+    };
+    setTimeout(() => tick(0), 1000);
+  };
+
   // ── Дерево ───────────────────────────────────────────────────────────────────
   const GLYPH = {
     container: '<span class="nt-glyph"><svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3.5" width="12" height="7.5" rx="2"/><path d="M3.5 3.5 V2 a1 1 0 0 1 1-1 h5 a1 1 0 0 1 1 1 v1.5"/></svg></span>',
@@ -255,8 +282,9 @@
         body: source.value,
       });
       setDirty(false);
-      status.textContent = "Сохранено " + new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-      status.className = "ed-status saved";
+      status.textContent = "Сохранено " + new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) + gitNote(r);
+      status.className = "ed-status " + (r.gitError ? "dirty" : "saved");
+      watchPush(r);
       showProblems(r.errors, r.warnings);
       await loadTree();
     } catch (e) {
@@ -330,6 +358,9 @@
       dialog.close();
       await loadTree();
       await open(r.file);
+      status.textContent = "Создано" + gitNote(r);
+      status.className = "ed-status " + (r.gitError ? "dirty" : "saved");
+      watchPush(r);
       showProblems(r.errors, r.warnings);
     } catch (e) {
       newError.textContent = e.message;
@@ -340,6 +371,10 @@
   // ── Старт ────────────────────────────────────────────────────────────────────
   (async () => {
     await loadTree();
+    // Неотправленные коммиты с прошлого раза — сказать сразу, пока ничего не открыто
+    api("GET", "/api/git").then((s) => {
+      if (s.pushError) empty.insertAdjacentHTML("afterbegin", '<p class="login-error">Коммиты не отправлены в удалённый репозиторий: ' + esc(s.pushError) + "</p>");
+    }).catch(() => {});
     const file = new URLSearchParams(location.search).get("file");
     if (file) {
       try { await open(file); } catch (e) { status.textContent = e.message; }
