@@ -98,8 +98,21 @@ if (what === "projects") {
     await card.screenshot({ path: join(OUT, "object-page-expanded.png"), animations: "disabled", caret: "hide" });
     console.log("object-page-expanded.png");
   }
+} else if (what === "search") {
+  // Поиск по имени в дереве: search "<Проект>" "<запрос>" → tree-search.png (кадр левой панели)
+  const [, , query] = process.argv.slice(2);
+  await page.goto(`${FRONTEND}/#/p/${project.id}`);
+  const box = page.getByPlaceholder("Поиск по имени…");
+  await box.waitFor();
+  await box.fill(query ?? "заказ");
+  await page.locator(".nt-row--clickable").first().waitFor();
+  await page.waitForTimeout(600);
+  // Панель высокая и почти пустая под результатами — кадр только её верх
+  const b = await page.locator("aside").first().boundingBox();
+  await page.screenshot({ path: join(OUT, "tree-search.png"), animations: "disabled", caret: "hide", clip: { x: b.x, y: b.y, width: b.width, height: 300 } });
+  console.log("tree-search.png");
 } else {
-  throw new Error("что снимать: projects | home | node");
+  throw new Error("что снимать: projects | home | node | search");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
