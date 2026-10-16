@@ -3,7 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "license": "AGPL-3.0-only",
-  "description": "Пользовательская документация ArchMap (docs.archmap.tech): генератор статического сайта из Markdown",
+  "description": "Пользовательская документация ArchMap (docs.archmap.tech): Markdown-руководства и свой движок-вики с авторским режимом",
+  "repository": "github:eidunyushkinhse/archmap-docs",
   "type": "module",
   "engines": {
     "node": ">=22.18"
@@ -16,7 +17,8 @@
     "report": "node src/build.ts --report",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --test \"src/**/*.test.ts\"",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "hooks": "git config core.hooksPath scripts/git-hooks"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",

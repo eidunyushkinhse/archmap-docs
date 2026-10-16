@@ -1,0 +1,51 @@
+# archmap-docs — CLAUDE.md
+
+Пользовательская документация ArchMap (docs.archmap.tech). Продукт живёт в соседнем
+репозитории github.com/eidunyushkinhse/archmap (в нём — CLAUDE.md с контекстом продукта,
+spec.md и правила проекта); этот репозиторий — только документация и её движок.
+Правила для авторов текста — README.md.
+
+Стек
+- Node ≥ 22.18 (.nvmrc) исполняет TypeScript напрямую, сборки нет: tsconfig с
+  erasableSyntaxOnly и verbatimModuleSyntax, импорты с расширением `.ts`, никаких parameter
+  properties и enum.
+- markdown-it 14 (+ свои правила), highlight.js 11, MiniSearch 7 (поиск на клиенте),
+  TypeScript 6 — только для проверки типов. Тесты — `node --test`.
+
+Структура
+- content/ — Markdown: index.md («Домашняя страница»), user/ architect/ admin/ (руководство =
+  папка с index.md; фронтматтер title/short/order/description), _shared/ (фрагменты для
+  включений — единый источник истины), images/
+- src/ — движок: markdown.ts (включения <!--@include: …-->, ссылки на .md → адреса, якоря {#id},
+  блоки ::: note|tip|warning|danger|details, figure), content.ts (обход, навигация, проверка
+  ссылок/якорей/файлов), site.ts (подготовка и запись dist/), render.ts (шаблоны: дерево
+  страниц в стиле дерева объектов продукта, статья, вход, редактор), auth.ts (пароль scrypt,
+  сессия HMAC в cookie, лимит попыток), git.ts (автокоммит правок автора и отправка в remote),
+  server.ts (сервер: статика, скрытый вход /login, редактор /edit/, API правок с пересборкой,
+  watcher), build.ts (CLI статической сборки для CI), *.test.ts
+- theme/ — docs.css/docs.js (дерево, ящик, поиск, кнопки автора по cookie), editor.css/editor.js
+- scripts/git-hooks/pre-commit — гейт (npm run hooks подключает); .github/workflows/ci.yml — зеркало
+
+Команды
+- npm ci; npm run dev → http://localhost:8800 (авторский режим, пересборка по правкам, перезагрузка
+  вкладок); npm start — то же без перезагрузки (стенд)
+- npm run password — пароль автора (scrypt-хэш в .env); вход — /login (ссылок нет), редактор — /edit/
+- npm run build → dist/ (битая ссылка, якорь или файл — ошибка); npm run report — карта фрагментов
+- npm run check — типы и тесты; npm run hooks — pre-commit-гейт
+
+Правки автора и git
+- Сервер коммитит content/ после каждой правки через редактор (git.ts; автор —
+  DOCS_GIT_NAME/EMAIL или git config, иначе «Автор документации <docs@archmap.tech>»; если
+  подключён pre-commit-хук, коммит проходит через него — битая ссылка оставит правку
+  незакоммиченной, редактор это покажет);
+  DOCS_GIT_PUSH=true — отправка в remote с повтором после pull --rebase. Выключить —
+  DOCS_GIT_AUTOCOMMIT=false. Правки на диске мимо API сервер не коммитит.
+- Статус автокоммита — GET /api/git; ответы мутаций API несут commit и git.
+
+Правила
+- Комментарии в коде и сообщения коммитов — на русском: «feat: …» / «fix: …» / «docs: …» /
+  «chore: …»; последней строкой — Co-Authored-By с моделью, писавшей коммит.
+- Репозиторий ПУБЛИЧНЫЙ: названия рабочих систем владельца и чужих инфраструктур в текст,
+  примеры и картинки не попадают; примеры — демо-проект «Ярмарка» и открытые проекты.
+- Коммитить самому после каждого проверенного изменения (хук гоняет check + build).
+- Факты о продукте в руководствах сверять с продуктом (соседний репозиторий), не выдумывать.

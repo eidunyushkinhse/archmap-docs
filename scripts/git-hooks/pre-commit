@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Гейт перед коммитом: типы и тесты движка (если тронут код), сборка с проверкой ссылок —
+# битая ссылка, якорь или файл блокируют коммит. CI (.github/workflows/ci.yml) — зеркало.
+# Подключение: npm run hooks (git config core.hooksPath scripts/git-hooks).
+# Автокоммиты сервера тоже проходят через хук, если он подключён: правка с битой ссылкой
+# сохраняется на диск, но коммит не проходит — редактор показывает это автору.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$staged" ] && exit 0
+
+if [ ! -d node_modules ]; then
+  echo "pre-commit: node_modules нет — npm ci" >&2
+  exit 1
+fi
+if grep -qE '^(src/|theme/|package\.json|package-lock\.json|tsconfig\.json)' <<<"$staged"; then
+  echo "pre-commit: типы и тесты…"
+  npm run --silent check
+fi
+echo "pre-commit: сборка с проверкой ссылок…"
+npm run --silent build

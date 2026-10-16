@@ -1,0 +1,34 @@
+# Гейт документации — зеркало локального pre-commit (scripts/git-hooks/pre-commit):
+# типы и тесты движка (markdown, содержимое, вход, сервер, автокоммит), затем сборка —
+# она падает на битой ссылке, якоре или файле, так проверяется само содержимое.
+# Actions — по SHA коммита (тег в комментарии); обновляет их Dependabot.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: Типы, тесты и сборка с проверкой ссылок
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Зависимости
+        run: npm ci
+      - name: Типы и тесты
+        run: npm run check
+      - name: Сборка (битая ссылка, якорь или файл — ошибка)
+        run: npm run build
