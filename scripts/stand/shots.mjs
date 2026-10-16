@@ -69,8 +69,37 @@ if (what === "projects") {
   await page.mouse.move(720, 20);
   await page.screenshot({ path: join(OUT, "project-home.png"), animations: "disabled", caret: "hide" });
   console.log("project-home.png");
+} else if (what === "node") {
+  // Страница объекта: node "<Проект>" "<Имя объекта>" [expand] → object-page.png;
+  // с expand — объект раскрыт лупой, кадр — карточка «Схема» (object-page-expanded.png).
+  const [, , nodeName, expand] = process.argv.slice(2);
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
+  const node = all.find((n) => n.name === nodeName);
+  if (!node) throw new Error(`объект «${nodeName}» не найден`);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
+  const card = page.locator('.np-card:has(h3:text-is("Схема"))').first();
+  await card.waitFor();
+  await settle();
+  if (!expand) {
+    await page.mouse.move(720, 20);
+    await page.screenshot({ path: join(OUT, "object-page.png"), animations: "disabled", caret: "hide" });
+    console.log("object-page.png");
+  } else {
+    // Схема инертна до клика (оверлей «кликните, чтобы взаимодействовать») — сначала включаем её,
+    // затем лупа на фокусе (первая на схеме страницы); карточка «Схема» — к верху, кадр карточки целиком
+    await card.scrollIntoViewIfNeeded();
+    await card.locator(".esb-activate").click();
+    await page.waitForTimeout(300);
+    await card.locator('button[title="Раскрыть содержимое"]').first().click();
+    await settle();
+    await card.evaluate((e) => { const sc = e.closest(".np-page"); if (sc) sc.scrollTop += e.getBoundingClientRect().top - 24; });
+    await page.waitForTimeout(500);
+    await page.mouse.move(720, 20);
+    await card.screenshot({ path: join(OUT, "object-page-expanded.png"), animations: "disabled", caret: "hide" });
+    console.log("object-page-expanded.png");
+  }
 } else {
-  throw new Error("что снимать: projects | home");
+  throw new Error("что снимать: projects | home | node");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
