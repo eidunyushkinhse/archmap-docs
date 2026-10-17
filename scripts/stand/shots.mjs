@@ -185,6 +185,17 @@ if (what === "projects") {
   await page.waitForTimeout(500);
   await dlg.screenshot({ path: join(OUT, dialogFile ?? "export-dialog.png"), animations: "disabled", caret: "hide" });
   console.log(dialogFile ?? "export-dialog.png");
+} else if (what === "password") {
+  // Окно «Сменить пароль» из меню профиля: password "<Проект>" <файл.png>
+  const [, , file] = process.argv.slice(2);
+  await page.goto(`${FRONTEND}/#/projects`);
+  await page.locator('button[aria-label="Профиль"]').click();
+  await page.getByText("Сменить пароль", { exact: true }).click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.locator("#cp-old").waitFor();
+  await page.waitForTimeout(400);
+  await dlg.screenshot({ path: join(OUT, file ?? "password.png"), animations: "disabled", caret: "hide" });
+  console.log(file ?? "password.png");
 } else if (what === "process") {
   // Режим «Процессы»: process "<Проект>" "<Имя процесса>" <файл.png> — переключатель
   // «Процессы» в шапке, процесс выбирается в списке слева, кадр — окно целиком.
