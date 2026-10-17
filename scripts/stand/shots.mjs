@@ -128,20 +128,25 @@ if (what === "projects") {
   await card.screenshot({ path: join(OUT, file ?? "section.png"), animations: "disabled", caret: "hide" });
   console.log(file ?? "section.png");
 } else if (what === "doc") {
-  // Окно схемы логики / спеки: doc "<Проект>" "<Имя объекта>" "<Имя схемы>" <файл.png> [spec]
+  // Окно схемы логики / спеки: doc "<Проект>" "<Имя объекта>" "<Имя схемы>" <файл.png> [spec|spec-open]
   // — кнопка «Открыть схему «…»» (или «Открыть спецификацию «…»») на странице объекта, кадр — окно.
+  // Своя спека объекта — имя схемы = имя объекта (строка «Спецификация» раздела OpenAPI);
+  // spec-open — в окне раскрыта первая операция.
   const [, , nodeName, docName, file, kind] = process.argv.slice(2);
   const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
   const node = all.find((n) => n.name === nodeName);
   if (!node) throw new Error(`объект «${nodeName}» не найден`);
   await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
-  const label = kind === "spec" ? `Открыть спецификацию «${docName}»` : `Открыть схему «${docName}»`;
-  const btn = page.locator(`button[title="${label}"]`).first();
+  const spec = kind?.startsWith("spec");
+  const btn = spec && docName === nodeName
+    ? page.locator('.np-card:has(h3:text-is("OpenAPI")) button.np-doc-row').first()
+    : page.locator(`button[title="${spec ? `Открыть спецификацию «${docName}»` : `Открыть схему «${docName}»`}"]`).first();
   await btn.waitFor();
   await settle(300);
   await btn.click();
   const dlg = page.locator("dialog[open]");
-  await dlg.locator("svg, pre, .cm-editor").first().waitFor({ timeout: 30000 });
+  await dlg.locator(spec ? ".opblock-summary" : "svg, pre, .cm-editor").first().waitFor({ timeout: 30000 });
+  if (kind === "spec-open") await dlg.locator(".opblock-summary").first().click();
   await page.waitForTimeout(1500);
   await page.mouse.move(720, 20);
   await dlg.screenshot({ path: join(OUT, file ?? "doc.png"), animations: "disabled", caret: "hide" });
