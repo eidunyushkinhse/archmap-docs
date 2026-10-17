@@ -164,6 +164,27 @@ if (what === "projects") {
   await page.mouse.move(720, 20);
   await dlg.screenshot({ path: join(OUT, file ?? "doc.png"), animations: "disabled", caret: "hide" });
   console.log(file ?? "doc.png");
+} else if (what === "export") {
+  // Меню «Действия со схемой» на странице проекта: export "<Проект>" <меню.png> <окно.png>
+  // — кадр меню (правый верх) и окно «Экспорт схемы».
+  const [, , menuFile, dialogFile] = process.argv.slice(2);
+  await page.goto(`${FRONTEND}/#/p/${project.id}`);
+  await page.getByText("Схема системы").waitFor();
+  await settle(300);
+  await page.locator('button[aria-label="Действия со схемой"]').click();
+  const menu = page.locator('[role="menu"][aria-label="Действия со схемой"]');
+  await menu.waitFor();
+  await page.waitForTimeout(300);
+  const mb = await menu.boundingBox();
+  await page.screenshot({ path: join(OUT, menuFile ?? "export-menu.png"), animations: "disabled", caret: "hide",
+    clip: { x: mb.x - 260, y: 0, width: mb.width + 280, height: mb.y + mb.height + 20 } });
+  console.log(menuFile ?? "export-menu.png");
+  await menu.getByRole("menuitem", { name: "Экспорт схемы" }).click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.locator("pre").waitFor({ timeout: 30000 });
+  await page.waitForTimeout(500);
+  await dlg.screenshot({ path: join(OUT, dialogFile ?? "export-dialog.png"), animations: "disabled", caret: "hide" });
+  console.log(dialogFile ?? "export-dialog.png");
 } else if (what === "process") {
   // Режим «Процессы»: process "<Проект>" "<Имя процесса>" <файл.png> — переключатель
   // «Процессы» в шапке, процесс выбирается в списке слева, кадр — окно целиком.
