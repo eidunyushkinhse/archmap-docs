@@ -1,6 +1,6 @@
 ---
 title: Подключить ИИ-агента к ArchMap
-order: 14
+order: 15
 ---
 
 ::: note
