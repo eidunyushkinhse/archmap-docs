@@ -127,8 +127,27 @@ if (what === "projects") {
   await page.mouse.move(720, 20);
   await card.screenshot({ path: join(OUT, file ?? "section.png"), animations: "disabled", caret: "hide" });
   console.log(file ?? "section.png");
+} else if (what === "doc") {
+  // Окно схемы логики / спеки: doc "<Проект>" "<Имя объекта>" "<Имя схемы>" <файл.png> [spec]
+  // — кнопка «Открыть схему «…»» (или «Открыть спецификацию «…»») на странице объекта, кадр — окно.
+  const [, , nodeName, docName, file, kind] = process.argv.slice(2);
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
+  const node = all.find((n) => n.name === nodeName);
+  if (!node) throw new Error(`объект «${nodeName}» не найден`);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
+  const label = kind === "spec" ? `Открыть спецификацию «${docName}»` : `Открыть схему «${docName}»`;
+  const btn = page.locator(`button[title="${label}"]`).first();
+  await btn.waitFor();
+  await settle(300);
+  await btn.click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.locator("svg, pre, .cm-editor").first().waitFor({ timeout: 30000 });
+  await page.waitForTimeout(1500);
+  await page.mouse.move(720, 20);
+  await dlg.screenshot({ path: join(OUT, file ?? "doc.png"), animations: "disabled", caret: "hide" });
+  console.log(file ?? "doc.png");
 } else {
-  throw new Error("что снимать: projects | home | node | search | section");
+  throw new Error("что снимать: projects | home | node | search | section | doc");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
