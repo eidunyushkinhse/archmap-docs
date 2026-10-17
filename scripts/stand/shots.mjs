@@ -112,9 +112,10 @@ if (what === "projects") {
   await page.screenshot({ path: join(OUT, "tree-search.png"), animations: "disabled", caret: "hide", clip: { x: b.x, y: b.y, width: b.width, height: 300 } });
   console.log("tree-search.png");
 } else if (what === "section") {
-  // Раздел страницы объекта: section "<Проект>" "<Имя объекта>" "<Заголовок раздела>" <файл.png>
-  // — раздел прокручивается к верху страницы, кадр — только он.
-  const [, , nodeName, title, file] = process.argv.slice(2);
+  // Раздел страницы объекта: section "<Проект>" "<Имя объекта>" "<Заголовок раздела>" <файл.png> [запись]
+  // — раздел прокручивается к верху страницы, кадр — только он; с «записью» (имя таблицы
+  // или канала) она сначала раскрывается шевроном.
+  const [, , nodeName, title, file, item] = process.argv.slice(2);
   const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
   const node = all.find((n) => n.name === nodeName);
   if (!node) throw new Error(`объект «${nodeName}» не найден`);
@@ -122,6 +123,18 @@ if (what === "projects") {
   const card = page.locator(`.np-card:has(h3:text-is("${title}"))`).first();
   await card.waitFor();
   await settle();
+  if (item) {
+    await card.locator("[data-flip-id]", { has: page.getByText(item, { exact: true }) })
+      .locator('button[aria-expanded="false"]').first().click();
+    await page.waitForTimeout(600);
+  }
+  // Раздел выше окна: шапка страницы закрыла бы его верх, а прокрутка .np-page обрезала
+  // бы низ — окно вытягивается под раздел.
+  const h = (await card.boundingBox()).height;
+  if (h > 800) {
+    await page.setViewportSize({ width: 1440, height: Math.ceil(h) + 160 });
+    await page.waitForTimeout(400);
+  }
   await card.evaluate((e) => { const sc = e.closest(".np-page"); if (sc) sc.scrollTop += e.getBoundingClientRect().top - 24; });
   await page.waitForTimeout(500);
   await page.mouse.move(720, 20);
