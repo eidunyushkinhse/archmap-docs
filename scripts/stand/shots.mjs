@@ -164,8 +164,23 @@ if (what === "projects") {
   await page.mouse.move(720, 20);
   await dlg.screenshot({ path: join(OUT, file ?? "doc.png"), animations: "disabled", caret: "hide" });
   console.log(file ?? "doc.png");
+} else if (what === "process") {
+  // Режим «Процессы»: process "<Проект>" "<Имя процесса>" <файл.png> — переключатель
+  // «Процессы» в шапке, процесс выбирается в списке слева, кадр — окно целиком.
+  const [, , procName, file] = process.argv.slice(2);
+  await page.goto(`${FRONTEND}/#/p/${project.id}`);
+  await page.locator('button[title="Бизнес-процессы"]').click();
+  await page.locator(".bp-procrow", { hasText: procName }).first().click();
+  await page.locator('[data-tour="process-diagram"]').waitFor();
+  await page.waitForTimeout(1200);
+  await page.mouse.move(720, 20);
+  // CLIP_H — высота кадра сверху (CSS-пиксели), если вся диаграмма не нужна.
+  const clipH = Number(process.env.CLIP_H) || 0;
+  await page.screenshot({ path: join(OUT, file ?? "process.png"), animations: "disabled", caret: "hide",
+    ...(clipH ? { clip: { x: 0, y: 0, width: 1440, height: clipH } } : {}) });
+  console.log(file ?? "process.png");
 } else {
-  throw new Error("что снимать: projects | home | node | search | section | doc");
+  throw new Error("что снимать: projects | home | node | search | section | doc | process");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
