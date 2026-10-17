@@ -111,8 +111,24 @@ if (what === "projects") {
   const b = await page.locator("aside").first().boundingBox();
   await page.screenshot({ path: join(OUT, "tree-search.png"), animations: "disabled", caret: "hide", clip: { x: b.x, y: b.y, width: b.width, height: 300 } });
   console.log("tree-search.png");
+} else if (what === "section") {
+  // Раздел страницы объекта: section "<Проект>" "<Имя объекта>" "<Заголовок раздела>" <файл.png>
+  // — раздел прокручивается к верху страницы, кадр — только он.
+  const [, , nodeName, title, file] = process.argv.slice(2);
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
+  const node = all.find((n) => n.name === nodeName);
+  if (!node) throw new Error(`объект «${nodeName}» не найден`);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
+  const card = page.locator(`.np-card:has(h3:text-is("${title}"))`).first();
+  await card.waitFor();
+  await settle();
+  await card.evaluate((e) => { const sc = e.closest(".np-page"); if (sc) sc.scrollTop += e.getBoundingClientRect().top - 24; });
+  await page.waitForTimeout(500);
+  await page.mouse.move(720, 20);
+  await card.screenshot({ path: join(OUT, file ?? "section.png"), animations: "disabled", caret: "hide" });
+  console.log(file ?? "section.png");
 } else {
-  throw new Error("что снимать: projects | home | node | search");
+  throw new Error("что снимать: projects | home | node | search | section");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
