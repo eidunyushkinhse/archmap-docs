@@ -211,8 +211,64 @@ if (what === "projects") {
   await page.screenshot({ path: join(OUT, file ?? "process.png"), animations: "disabled", caret: "hide",
     ...(clipH ? { clip: { x: 0, y: 0, width: 1440, height: clipH } } : {}) });
   console.log(file ?? "process.png");
+} else if (what === "create") {
+  // Окно «Новый проект» (DOCS_USER=architect): create "<Проект-источник>" <файл.png> "<Название>"
+  // — способ «Копия», источник выбран, название набрано; кадр — окно.
+  const [, , file, title] = process.argv.slice(2);
+  await page.goto(`${FRONTEND}/#/projects`);
+  await page.locator(".project-card").first().waitFor();
+  await page.getByRole("button", { name: "Новый проект" }).click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.getByRole("button", { name: "Копия", exact: true }).click();
+  await dlg.locator(".cp-row", { hasText: project.name }).click();
+  await dlg.getByPlaceholder("Например, «Платёжная платформа»").fill(title ?? "Черновик");
+  await page.waitForTimeout(400);
+  await dlg.screenshot({ path: join(OUT, file ?? "create-project.png"), animations: "disabled", caret: "hide" });
+  console.log(file ?? "create-project.png");
+} else if (what === "editor") {
+  // Редактор схемы (DOCS_USER=architect): editor "<Проект>" "<Уровень>" <файл.png> [node "<Объект>" |
+  // edge "<Откуда>" "<Куда>" | hover "<Объект>"] — уровень контейнера; node — панель свойств объекта
+  // (двойной клик), edge — панель связи (двойной клик по её плашке), hover — стрелки по сторонам
+  // объекта под указателем (SIDE=right|left|top|bottom — указатель на стрелке этой стороны:
+  // пунктир быстрой связи). Кадр — окно целиком или CLIP="x,y,w,h" (CSS-пиксели). Ничего не
+  // сохраняет.
+  const [, , levelName, file, kind, a, b] = process.argv.slice(2);
+  const hdr = { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } };
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, hdr)).json();
+  const byName = (n) => { const x = all.find((y) => y.name === n); if (!x) throw new Error(`объект «${n}» не найден`); return x; };
+  const level = byName(levelName);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/map/${level.id}`);
+  await page.locator(".react-flow__node").first().waitFor();
+  await settle();
+  if (kind === "node" || kind === "hover") {
+    const el = page.locator(`.react-flow__node[data-id="${byName(a).id}"]`);
+    if (kind === "node") await el.dblclick();
+    else {
+      await el.hover();
+      const side = process.env.SIDE;
+      if (side) {
+        const r = await el.boundingBox();
+        const at = { right: [r.x + r.width + 14, r.y + r.height / 2], left: [r.x - 14, r.y + r.height / 2],
+          top: [r.x + r.width / 2, r.y - 14], bottom: [r.x + r.width / 2, r.y + r.height + 14] }[side];
+        await page.mouse.move(at[0], at[1], { steps: 4 });
+      }
+    }
+  } else if (kind === "edge") {
+    const src = byName(a).id, tgt = byName(b).id;
+    const edges = await (await fetch(`${BACKEND}/api/v1/edges`, hdr)).json();
+    const edge = edges.find((e) => e.source_id === src && e.target_id === tgt);
+    if (!edge) throw new Error(`связь «${a}» → «${b}» не найдена`);
+    // Плашка связи адресуется data-lg-edge (id ребра холста)
+    await page.locator(`[data-lg-edge="${edge.id}"]`).first().dblclick();
+  }
+  await page.waitForTimeout(800);
+  if (kind !== "hover") await page.mouse.move(720, 20);
+  const clip = process.env.CLIP?.split(",").map(Number);
+  await page.screenshot({ path: join(OUT, file ?? "editor.png"), animations: "disabled", caret: "hide",
+    ...(clip ? { clip: { x: clip[0], y: clip[1], width: clip[2], height: clip[3] } } : {}) });
+  console.log(file ?? "editor.png");
 } else {
-  throw new Error("что снимать: projects | home | node | search | section | doc | process");
+  throw new Error("что снимать: projects | home | node | search | section | doc | process | export | password | create | editor");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
