@@ -37,12 +37,11 @@ const ICON_SEARCH =
 const ICON_MENU =
   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
 
-// Глифы дерева — те же, что в дереве объектов продукта (nodeTree.shared.tsx):
-// контейнер — «коробка с крышкой», лист — прямоугольник; плюс дом для главной.
+// Глиф дерева — только дом у главной. «Коробка» контейнера и прямоугольник листа из
+// дерева объектов продукта сняты: в документации эта метафора неочевидна (замечание
+// владельца 2026-10-17), разделы и так отличает шеврон и жирное начертание.
 const GLYPH_ATTRS = 'fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"';
-const GLYPH_CONTAINER = `<span class="nt-glyph"><svg width="14" height="12" viewBox="0 0 14 12"><rect x="1" y="3.5" width="12" height="7.5" rx="2" ${GLYPH_ATTRS}/><path d="M3.5 3.5 V2 a1 1 0 0 1 1-1 h5 a1 1 0 0 1 1 1 v1.5" ${GLYPH_ATTRS}/></svg></span>`;
-const GLYPH_LEAF = `<span class="nt-glyph"><svg width="14" height="12" viewBox="0 0 14 12"><rect x="1.5" y="1.5" width="11" height="9" rx="2" ${GLYPH_ATTRS}/></svg></span>`;
-const GLYPH_HOME = `<span class="nt-glyph"><svg width="14" height="12" viewBox="0 0 14 12"><path d="M1.5 6.2 7 1.5l5.5 4.7M3 5v5.5h8V5" ${GLYPH_ATTRS}/></svg></span>`;
+const GLYPH_HOME = `<span class="nt-glyph nt-glyph--lead"><svg width="14" height="12" viewBox="0 0 14 12"><path d="M1.5 6.2 7 1.5l5.5 4.7M3 5v5.5h8V5" ${GLYPH_ATTRS}/></svg></span>`;
 const CHEVRON =
   '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6 L15 12 L9 18"/></svg>';
 
@@ -81,13 +80,14 @@ ${withSearch ? `<div class="search" data-search>
 }
 
 // ── Дерево страниц (стиль дерева объектов продукта) ──────────────────────────────
-function treeRow(opts: { page: Page; label: string; glyph: string; current: boolean; children: string; open: boolean; container: boolean }): string {
+function treeRow(opts: { page: Page; label: string; glyph?: string; current: boolean; children: string; open: boolean; container: boolean }): string {
   const { page, label, glyph, current, children, open, container } = opts;
+  // Глиф (дом у главной) стоит в колонке шевронов: имя выровнено с именами руководств
   const chev = children
     ? `<button type="button" class="nt-chevzone" data-toggle aria-expanded="${open}" aria-label="${open ? "Свернуть ветку" : "Развернуть ветку"}"><span class="nt-chevhit"><span class="nt-chev">${CHEVRON}</span></span></button>`
-    : '<span class="nt-chevspacer"></span>';
+    : glyph ? "" : '<span class="nt-chevspacer"></span>';
   return `<div class="nt-node${open ? " nt-node--open" : ""}" data-file="${h(page.file)}">
-<div class="nt-row${current ? " nt-row--current" : ""}">${chev}<a class="nt-link" href="${page.url}"${current ? ' aria-current="page"' : ""}>${glyph}<span class="nt-name${container ? " nt-name--container" : ""}">${h(label)}</span></a></div>
+<div class="nt-row${current ? " nt-row--current" : ""}">${chev}<a class="nt-link" href="${page.url}"${current ? ' aria-current="page"' : ""}>${glyph ?? ""}<span class="nt-name${container ? " nt-name--container" : ""}">${h(label)}</span></a></div>
 ${children ? `<div class="nt-children"${open ? "" : " hidden"}>${children}</div>` : ""}
 </div>`;
 }
@@ -96,15 +96,15 @@ function navTree(items: NavItem[], active: Page | null, openFiles: Set<string>):
   return items
     .map((it) => {
       if (it.kind === "page") {
-        return treeRow({ page: it.page, label: it.page.title, glyph: GLYPH_LEAF, current: it.page === active, children: "", open: false, container: false });
+        return treeRow({ page: it.page, label: it.page.title, current: it.page === active, children: "", open: false, container: false });
       }
       const kids = navTree(it.items, active, openFiles);
       if (!it.index) {
         // Раздел без index.md: подпись без ссылки
-        return `<div class="nt-node nt-node--open"><div class="nt-row"><span class="nt-chevspacer"></span><span class="nt-link nt-link--plain">${GLYPH_CONTAINER}<span class="nt-name nt-name--container">${h(it.title)}</span></span></div><div class="nt-children">${kids}</div></div>`;
+        return `<div class="nt-node nt-node--open"><div class="nt-row"><span class="nt-chevspacer"></span><span class="nt-link nt-link--plain"><span class="nt-name nt-name--container">${h(it.title)}</span></span></div><div class="nt-children">${kids}</div></div>`;
       }
       const open = openFiles.has(it.index.file);
-      return treeRow({ page: it.index, label: it.title, glyph: GLYPH_CONTAINER, current: it.index === active, children: kids, open, container: true });
+      return treeRow({ page: it.index, label: it.title, current: it.index === active, children: kids, open, container: true });
     })
     .join("");
 }
@@ -125,11 +125,11 @@ export function treeHtml(site: Site, active: Page | null): string {
   const open = openBranches(site, active);
   const home = treeRow({ page: site.home, label: SITE.homeLabel, glyph: GLYPH_HOME, current: site.home === active, children: "", open: false, container: false });
   const guides = site.guides
-    .map((g) => treeRow({ page: g.index, label: g.title, glyph: GLYPH_CONTAINER, current: g.index === active, children: navTree(g.nav, active, open), open: open.has(g.index.file), container: true }))
+    .map((g) => treeRow({ page: g.index, label: g.title, current: g.index === active, children: navTree(g.nav, active, open), open: open.has(g.index.file), container: true }))
     .join("");
   const standalone = site.pages
     .filter((p) => p.guide === null && p !== site.home)
-    .map((p) => treeRow({ page: p, label: p.title, glyph: GLYPH_LEAF, current: p === active, children: "", open: false, container: false }))
+    .map((p) => treeRow({ page: p, label: p.title, current: p === active, children: "", open: false, container: false }))
     .join("");
   return `<nav class="tree" aria-label="Страницы документации">${home}${guides}${standalone}</nav>`;
 }
