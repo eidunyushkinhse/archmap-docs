@@ -3,13 +3,18 @@
 //   node shots.mjs projects            → projects-list.png (экран «Проекты»)
 //   node shots.mjs home "Маркетплейс «Ярмарка»" → project-home.png (страница проекта)
 // Файлы кладутся в OUT (по умолчанию content/images репозитория документации).
+// DOCS_LANG=en — английский «прототип» тех же окон в content/en/images (см. en.mjs):
+// имена из данных в аргументах — по-русски, как в базе стенда.
 import { chromium } from "/home/eidunyushkin/.npm/_npx/e41f203b7505f1fb/node_modules/playwright/index.mjs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { domPass, installEn, loadDict, report, translate } from "./en.mjs";
 
-const FRONTEND = "http://localhost:5173";
-const BACKEND = "http://localhost:8000";
-const OUT = process.env.OUT ?? "/home/eidunyushkin/archmap-docs/content/images";
+// Адреса стенда; второй стенд рядом с основным — FRONTEND=http://localhost:5174 BACKEND=http://localhost:8001
+const FRONTEND = process.env.FRONTEND ?? "http://localhost:5173";
+const BACKEND = process.env.BACKEND ?? "http://localhost:8000";
+const EN = process.env.DOCS_LANG === "en";
+const OUT = process.env.OUT ?? `/home/eidunyushkin/archmap-docs/content/${EN ? "en/" : ""}images`;
 const USER = process.env.DOCS_USER ?? "reader";
 const PASS = process.env.DOCS_PASS ?? "docs-stand-2026";
 const [what, projectName = "Маркетплейс «Ярмарка»"] = process.argv.slice(2);
@@ -34,6 +39,23 @@ await ctx.addInitScript(([t, p]) => { localStorage.setItem("access_token", t); l
 const page = await ctx.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
+const dict = EN ? loadDict() : null;
+const apiMiss = new Set();
+if (EN) await installEn(page, FRONTEND, dict, apiMiss);
+// Имя из данных так, как его видит страница (в английском режиме — переведённым)
+const D = (name) => (EN ? translate(name, dict) : name);
+
+// Кадр: в английском режиме сначала подписи интерфейса и отчёт об остатках кириллицы
+async function snap(target, file, opts = {}) {
+  // Локатор ищет по русским подписям — элемент фиксируется до их перевода
+  const el = EN && target !== page ? await target.elementHandle() : target;
+  if (EN) {
+    report(file, apiMiss, await domPass(page, dict));
+    await page.waitForTimeout(300);
+  }
+  await el.screenshot({ path: join(OUT, file), animations: "disabled", caret: "hide", ...opts });
+  console.log(file);
+}
 
 // Оседание раскладки: как в scripts/landing-shots.mjs — сеть тиха, конвейер не в полёте,
 // сигнатура узлов/рёбер стабильна два замера подряд.
@@ -60,15 +82,13 @@ if (what === "projects") {
   await page.locator(".project-card").first().waitFor();
   await settle(600);
   await page.mouse.move(720, 20);
-  await page.screenshot({ path: join(OUT, "projects-list.png"), animations: "disabled", caret: "hide" });
-  console.log("projects-list.png");
+  await snap(page, "projects-list.png");
 } else if (what === "home") {
   await page.goto(`${FRONTEND}/#/p/${project.id}`);
   await page.getByText("Схема системы").waitFor();
   await settle();
   await page.mouse.move(720, 20);
-  await page.screenshot({ path: join(OUT, "project-home.png"), animations: "disabled", caret: "hide" });
-  console.log("project-home.png");
+  await snap(page, "project-home.png");
 } else if (what === "node") {
   // Страница объекта: node "<Проект>" "<Имя объекта>" [expand] → object-page.png;
   // с expand — объект раскрыт лупой, кадр — карточка «Схема» (object-page-expanded.png).
@@ -82,8 +102,7 @@ if (what === "projects") {
   await settle();
   if (!expand) {
     await page.mouse.move(720, 20);
-    await page.screenshot({ path: join(OUT, "object-page.png"), animations: "disabled", caret: "hide" });
-    console.log("object-page.png");
+    await snap(page, "object-page.png");
   } else {
     // Схема инертна до клика (оверлей «кликните, чтобы взаимодействовать») — сначала включаем её,
     // затем лупа на фокусе (первая на схеме страницы); карточка «Схема» — к верху, кадр карточки целиком
@@ -95,8 +114,7 @@ if (what === "projects") {
     await card.evaluate((e) => { const sc = e.closest(".np-page"); if (sc) sc.scrollTop += e.getBoundingClientRect().top - 24; });
     await page.waitForTimeout(500);
     await page.mouse.move(720, 20);
-    await card.screenshot({ path: join(OUT, "object-page-expanded.png"), animations: "disabled", caret: "hide" });
-    console.log("object-page-expanded.png");
+    await snap(card, "object-page-expanded.png");
   }
 } else if (what === "search") {
   // Поиск по имени в дереве: search "<Проект>" "<запрос>" → tree-search.png (кадр левой панели)
@@ -104,13 +122,12 @@ if (what === "projects") {
   await page.goto(`${FRONTEND}/#/p/${project.id}`);
   const box = page.getByPlaceholder("Поиск по имени…");
   await box.waitFor();
-  await box.fill(query ?? "заказ");
+  await box.fill(query ?? (EN ? "order" : "заказ"));
   await page.locator(".nt-row--clickable").first().waitFor();
   await page.waitForTimeout(600);
   // Панель высокая и почти пустая под результатами — кадр только её верх
   const b = await page.locator("aside").first().boundingBox();
-  await page.screenshot({ path: join(OUT, "tree-search.png"), animations: "disabled", caret: "hide", clip: { x: b.x, y: b.y, width: b.width, height: 300 } });
-  console.log("tree-search.png");
+  await snap(page, "tree-search.png", { clip: { x: b.x, y: b.y, width: b.width, height: 300 } });
 } else if (what === "section") {
   // Раздел страницы объекта: section "<Проект>" "<Имя объекта>" "<Заголовок раздела>" <файл.png> [запись]
   // — раздел прокручивается к верху страницы, кадр — только он; с «записью» (имя таблицы
@@ -138,8 +155,7 @@ if (what === "projects") {
   await card.evaluate((e) => { const sc = e.closest(".np-page"); if (sc) sc.scrollTop += e.getBoundingClientRect().top - 24; });
   await page.waitForTimeout(500);
   await page.mouse.move(720, 20);
-  await card.screenshot({ path: join(OUT, file ?? "section.png"), animations: "disabled", caret: "hide" });
-  console.log(file ?? "section.png");
+  await snap(card, file ?? "section.png");
 } else if (what === "doc") {
   // Окно схемы логики / спеки: doc "<Проект>" "<Имя объекта>" "<Имя схемы>" <файл.png> [spec|spec-open]
   // — кнопка «Открыть схему «…»» (или «Открыть спецификацию «…»») на странице объекта, кадр — окно.
@@ -153,7 +169,7 @@ if (what === "projects") {
   const spec = kind?.startsWith("spec");
   const btn = spec && docName === nodeName
     ? page.locator('.np-card:has(h3:text-is("OpenAPI")) button.np-doc-row').first()
-    : page.locator(`button[title="${spec ? `Открыть спецификацию «${docName}»` : `Открыть схему «${docName}»`}"]`).first();
+    : page.locator(`button[title="${spec ? `Открыть спецификацию «${D(docName)}»` : `Открыть схему «${D(docName)}»`}"]`).first();
   await btn.waitFor();
   await settle(300);
   await btn.click();
@@ -162,8 +178,7 @@ if (what === "projects") {
   if (kind === "spec-open") await dlg.locator(".opblock-summary").first().click();
   await page.waitForTimeout(1500);
   await page.mouse.move(720, 20);
-  await dlg.screenshot({ path: join(OUT, file ?? "doc.png"), animations: "disabled", caret: "hide" });
-  console.log(file ?? "doc.png");
+  await snap(dlg, file ?? "doc.png");
 } else if (what === "export") {
   // Меню «Действия со схемой» на странице проекта: export "<Проект>" <меню.png> <окно.png>
   // — кадр меню (правый верх) и окно «Экспорт схемы».
@@ -176,15 +191,12 @@ if (what === "projects") {
   await menu.waitFor();
   await page.waitForTimeout(300);
   const mb = await menu.boundingBox();
-  await page.screenshot({ path: join(OUT, menuFile ?? "export-menu.png"), animations: "disabled", caret: "hide",
-    clip: { x: mb.x - 260, y: 0, width: mb.width + 280, height: mb.y + mb.height + 20 } });
-  console.log(menuFile ?? "export-menu.png");
-  await menu.getByRole("menuitem", { name: "Экспорт схемы" }).click();
+  await snap(page, menuFile ?? "export-menu.png", { clip: { x: mb.x - 260, y: 0, width: mb.width + 280, height: mb.y + mb.height + 20 } });
+  await menu.getByRole("menuitem", { name: EN ? "Export diagram" : "Экспорт схемы" }).click();
   const dlg = page.locator("dialog[open]");
   await dlg.locator("pre").waitFor({ timeout: 30000 });
   await page.waitForTimeout(500);
-  await dlg.screenshot({ path: join(OUT, dialogFile ?? "export-dialog.png"), animations: "disabled", caret: "hide" });
-  console.log(dialogFile ?? "export-dialog.png");
+  await snap(dlg, dialogFile ?? "export-dialog.png");
 } else if (what === "password") {
   // Окно «Сменить пароль» из меню профиля: password "<Проект>" <файл.png>
   const [, , file] = process.argv.slice(2);
@@ -194,23 +206,20 @@ if (what === "projects") {
   const dlg = page.locator("dialog[open]");
   await dlg.locator("#cp-old").waitFor();
   await page.waitForTimeout(400);
-  await dlg.screenshot({ path: join(OUT, file ?? "password.png"), animations: "disabled", caret: "hide" });
-  console.log(file ?? "password.png");
+  await snap(dlg, file ?? "password.png");
 } else if (what === "process") {
   // Режим «Процессы»: process "<Проект>" "<Имя процесса>" <файл.png> — переключатель
   // «Процессы» в шапке, процесс выбирается в списке слева, кадр — окно целиком.
   const [, , procName, file] = process.argv.slice(2);
   await page.goto(`${FRONTEND}/#/p/${project.id}`);
   await page.locator('button[title="Бизнес-процессы"]').click();
-  await page.locator(".bp-procrow", { hasText: procName }).first().click();
+  await page.locator(".bp-procrow", { hasText: D(procName) }).first().click();
   await page.locator('[data-tour="process-diagram"]').waitFor();
   await page.waitForTimeout(1200);
   await page.mouse.move(720, 20);
   // CLIP_H — высота кадра сверху (CSS-пиксели), если вся диаграмма не нужна.
   const clipH = Number(process.env.CLIP_H) || 0;
-  await page.screenshot({ path: join(OUT, file ?? "process.png"), animations: "disabled", caret: "hide",
-    ...(clipH ? { clip: { x: 0, y: 0, width: 1440, height: clipH } } : {}) });
-  console.log(file ?? "process.png");
+  await snap(page, file ?? "process.png", clipH ? { clip: { x: 0, y: 0, width: 1440, height: clipH } } : {});
 } else if (what === "create") {
   // Окно «Новый проект» (DOCS_USER=architect): create "<Проект-источник>" <файл.png> "<Название>"
   // — способ «Копия», источник выбран, название набрано; кадр — окно.
@@ -223,8 +232,7 @@ if (what === "projects") {
   await dlg.locator(".cp-row", { hasText: project.name }).click();
   await dlg.getByPlaceholder("Например, «Платёжная платформа»").fill(title ?? "Черновик");
   await page.waitForTimeout(400);
-  await dlg.screenshot({ path: join(OUT, file ?? "create-project.png"), animations: "disabled", caret: "hide" });
-  console.log(file ?? "create-project.png");
+  await snap(dlg, file ?? "create-project.png");
 } else if (what === "editor") {
   // Редактор схемы (DOCS_USER=architect): editor "<Проект>" "<Уровень>" <файл.png> [node "<Объект>" |
   // edge "<Откуда>" "<Куда>" | hover "<Объект>"] — уровень контейнера; node — панель свойств объекта
@@ -264,9 +272,7 @@ if (what === "projects") {
   await page.waitForTimeout(800);
   if (kind !== "hover") await page.mouse.move(720, 20);
   const clip = process.env.CLIP?.split(",").map(Number);
-  await page.screenshot({ path: join(OUT, file ?? "editor.png"), animations: "disabled", caret: "hide",
-    ...(clip ? { clip: { x: clip[0], y: clip[1], width: clip[2], height: clip[3] } } : {}) });
-  console.log(file ?? "editor.png");
+  await snap(page, file ?? "editor.png", clip ? { clip: { x: clip[0], y: clip[1], width: clip[2], height: clip[3] } } : {});
 } else {
   throw new Error("что снимать: projects | home | node | search | section | doc | process | export | password | create | editor");
 }

@@ -226,6 +226,10 @@ Warning, Caution) и страница 404. Ссылки между языкам�
 Безличные и страдательные обороты о действиях читателя и в английском не используются:
 «You can add relationships in the diagram editor», а не «Relationships are added in the editor».
 
+Элементы интерфейса называются так, как назывались бы в английской версии ArchMap; словарь
+названий — `scripts/stand/en/ui.json`. Скриншоты — английский «прототип» окон со стенда
+(`DOCS_LANG=en`, см. `scripts/stand/README.md`).
+
 ## Блоки
 
 ```md
