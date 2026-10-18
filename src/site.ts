@@ -4,42 +4,50 @@
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { listFragments, loadSite, makeReader, validateSite } from "./content.ts";
+import { listFragments, loadSites, makeReader, unusedFragments, validateSite } from "./content.ts";
 import { createRenderer, DocsError } from "./markdown.ts";
 import { renderNotFound, renderPage, type Assets } from "./render.ts";
-import type { Page, Site } from "./types.ts";
+import type { Lang, Page, Site } from "./types.ts";
 
 export interface Prepared {
-  site: Site;
+  site: Site;    // русский сайт — основной
+  sites: Site[]; // сайты всех языков, русский первым
   errors: string[];
   warnings: string[];
   assets: Set<string>; // файлы из content/, на которые есть ссылки (копируются в dist)
 }
 
-// Читает content/, рендерит все страницы, проверяет ссылки. Ошибки содержимого собираются
-// в список (страница с ошибкой рендерится плашкой); структурная ошибка (нет index.md,
-// страница без названия) — исключение DocsError.
+// Читает content/, рендерит все страницы всех языков, проверяет ссылки. Ошибки содержимого
+// собираются в список (страница с ошибкой рендерится плашкой); структурная ошибка (нет
+// index.md, страница без названия) — исключение DocsError.
 export function prepareSite(contentDir: string): Prepared {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const site = loadSite(contentDir);
-  const renderer = createRenderer(makeReader(contentDir));
-  for (const p of site.pages) {
-    try {
-      p.render = renderer.render(p.file, p.body, p.title);
-    } catch (e) {
-      if (!(e instanceof DocsError)) throw e;
-      errors.push(e.message);
-      p.render = {
-        html: `<div class="callout callout-danger"><p class="callout-title">Ошибка сборки</p><p>${e.message.replace(/</g, "&lt;")}</p></div>`,
-        headings: [], sections: [], links: [], assets: [], includes: [],
-      };
+  const assets = new Set<string>();
+  const included = new Set<string>();
+  const sites = loadSites(contentDir);
+  for (const site of sites) {
+    const renderer = createRenderer(makeReader(contentDir), site.lang);
+    for (const p of site.pages) {
+      try {
+        p.render = renderer.render(p.file, p.body, p.title);
+      } catch (e) {
+        if (!(e instanceof DocsError)) throw e;
+        errors.push(e.message);
+        p.render = {
+          html: `<div class="callout callout-danger"><p class="callout-title">Ошибка сборки</p><p>${e.message.replace(/</g, "&lt;")}</p></div>`,
+          headings: [], sections: [], links: [], assets: [], includes: [],
+        };
+      }
     }
+    const v = validateSite(site, contentDir);
+    errors.push(...v.errors);
+    for (const a of v.assets) assets.add(a);
+    for (const f of v.included) included.add(f);
   }
-  const v = validateSite(site, contentDir);
-  errors.push(...v.errors);
-  warnings.push(...v.warnings);
-  return { site, errors, warnings, assets: v.assets };
+  // Фрагмент «никуда не включён», только если его не включил ни один язык
+  warnings.push(...unusedFragments(contentDir, included));
+  return { site: sites[0], sites, errors, warnings, assets };
 }
 
 function stamp(buf: Buffer | string): string {
@@ -64,8 +72,13 @@ function searchIndex(site: Site): string {
   return JSON.stringify(docs);
 }
 
+// Индекс поиска языка: search.json у русского, search-en.json у английского
+function searchFile(lang: Lang): string {
+  return lang === "ru" ? "search.json" : `search-${lang}.json`;
+}
+
 // Статика темы с версией в адресе (кэш браузера сбрасывается при любой правке файла)
-function writeAssets(outDir: string, themeDir: string, searchJson: string): Assets {
+function writeAssets(outDir: string, themeDir: string, sites: Site[]): Assets {
   const assetsDir = join(outDir, "assets");
   mkdirSync(assetsDir, { recursive: true });
   const put = (name: string, content: Buffer | string): string => {
@@ -79,7 +92,8 @@ function writeAssets(outDir: string, themeDir: string, searchJson: string): Asse
   const editorCss = put("editor.css", theme("editor.css"));
   const editorJs = put("editor.js", theme("editor.js"));
   put("minisearch.js", readFileSync(join(themeDir, "..", "node_modules", "minisearch", "dist", "umd", "index.js")));
-  const search = put("search.json", searchJson);
+  const search: Assets["search"] = {};
+  for (const s of sites) search[s.lang] = put(searchFile(s.lang), searchIndex(s));
   const favicon = theme("favicon.svg");
   writeFileSync(join(outDir, "favicon.svg"), favicon);
   return { css, hljs, js, editorCss, editorJs, search, favicon: `/favicon.svg?v=${stamp(favicon)}` };
@@ -99,20 +113,24 @@ export function neighbours(site: Site, page: Page): { prev: Page | null; next: P
   return { prev: guide.flat[i - 1] ?? null, next: guide.flat[i + 1] ?? null };
 }
 
-// Полная запись dist/: страницы, статика, картинки, индекс поиска, 404
+// Полная запись dist/: страницы, статика, картинки, индексы поиска, 404 каждого языка
+// (404.html у русского, en/404.html у английского)
 export function writeStatic(prepared: Prepared, outDir: string, contentDir: string, themeDir: string): Assets {
   if (outDir === "/" || outDir === contentDir || outDir === themeDir || outDir === dirname(contentDir)) {
     throw new Error(`отказ: папка сборки ${outDir} — не для dist`);
   }
-  const { site } = prepared;
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
-  const assets = writeAssets(outDir, themeDir, searchIndex(site));
-  for (const p of site.pages) {
-    const { prev, next } = neighbours(site, p);
-    writePage(outDir, p.url, renderPage(site, p, prev, next, assets));
+  const assets = writeAssets(outDir, themeDir, prepared.sites);
+  for (const site of prepared.sites) {
+    for (const p of site.pages) {
+      const { prev, next } = neighbours(site, p);
+      writePage(outDir, p.url, renderPage(site, p, prev, next, assets));
+    }
+    const notFound = join(outDir, site.home.url, "404.html");
+    mkdirSync(dirname(notFound), { recursive: true });
+    writeFileSync(notFound, renderNotFound(site, assets));
   }
-  writeFileSync(join(outDir, "404.html"), renderNotFound(site, assets));
   for (const rel of prepared.assets) {
     const src = join(contentDir, rel);
     if (!existsSync(src)) continue;
@@ -123,11 +141,11 @@ export function writeStatic(prepared: Prepared, outDir: string, contentDir: stri
   return assets;
 }
 
-// Карта «единого источника истины»: фрагмент → страницы, куда он включён
-export function fragmentUsage(site: Site, contentDir: string): { file: string; usedBy: string[] }[] {
+// Карта «единого источника истины»: фрагмент → страницы всех языков, куда он включён
+export function fragmentUsage(sites: Site[], contentDir: string): { file: string; usedBy: string[] }[] {
   const map = new Map<string, string[]>();
   for (const f of listFragments(contentDir)) map.set(f, []);
-  for (const p of site.pages) {
+  for (const p of sites.flatMap((s) => s.pages)) {
     for (const inc of p.render?.includes ?? []) {
       const list = map.get(inc) ?? [];
       list.push(p.file);
@@ -137,8 +155,8 @@ export function fragmentUsage(site: Site, contentDir: string): { file: string; u
   return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([file, usedBy]) => ({ file, usedBy }));
 }
 
-export function fragmentReport(site: Site, contentDir: string): string {
-  const rows = fragmentUsage(site, contentDir);
+export function fragmentReport(sites: Site[], contentDir: string): string {
+  const rows = fragmentUsage(sites, contentDir);
   if (!rows.length) return "Фрагментов нет.";
   return rows
     .map((r) => `  ${r.file}\n${r.usedBy.length ? r.usedBy.map((p) => `    → ${p}`).join("\n") : "    (никуда не включён)"}`)

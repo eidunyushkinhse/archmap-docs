@@ -4,11 +4,21 @@
 //  - Страница — любой .md вне папок с «_» в начале; подпапка — раздел навигации (заголовок —
 //    из её index.md, если есть). Порядок — order во фронтматтере, затем по названию.
 //  - Фрагменты для включений живут в папках с «_» (content/_shared); страницами они не становятся.
+//  - Языки: русский сайт — корень content/, английский — content/en/ с той же структурой
+//    (главная en/index.md, руководства en/user/…, адреса /en/…). У каждого языка свой сайт:
+//    дерево, руководства, поиск; ссылки между языками сборка не пропускает.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fmNumber, fmString, splitFrontMatter } from "./frontmatter.ts";
 import { DocsError, pageUrl, type SourceReader } from "./markdown.ts";
-import type { Guide, NavItem, Page, Site } from "./types.ts";
+import type { Guide, Lang, NavItem, Page, Site } from "./types.ts";
+
+// Папка языка от корня content: «» у русского, «en/» у английского
+export const LANG_DIR: Record<Lang, string> = { ru: "", en: "en/" };
+
+export function langOf(file: string): Lang {
+  return file.startsWith(LANG_DIR.en) ? "en" : "ru";
+}
 
 function isHidden(name: string): boolean {
   return name.startsWith("_") || name.startsWith(".");
@@ -53,7 +63,7 @@ export function makeReader(root: string): SourceReader {
   };
 }
 
-function loadPage(root: string, file: string): Page {
+function loadPage(root: string, file: string, lang: Lang): Page {
   const src = readFileSync(join(root, file), "utf8");
   let fm: Page["fm"];
   let body: string;
@@ -73,15 +83,17 @@ function loadPage(root: string, file: string): Page {
       throw new DocsError(`${file}: нет названия — добавьте «title:» во фронтматтер или «# Заголовок» первой строкой`);
     }
   }
-  const slash = file.indexOf("/");
+  const rel = file.slice(LANG_DIR[lang].length);
+  const slash = rel.indexOf("/");
   return {
     file,
     url: pageUrl(file),
+    lang,
     title,
     description: fmString(fm, "description") ?? "",
     order: fmNumber(fm, "order") ?? 1000,
     fm,
-    guide: slash < 0 ? null : file.slice(0, slash),
+    guide: slash < 0 ? null : rel.slice(0, slash),
     body,
     render: null,
   };
@@ -95,8 +107,8 @@ function navTitle(item: NavItem): string {
   return item.kind === "page" ? item.page.title : item.title;
 }
 
-// Дерево навигации папки prefix («user/», «user/import/») по страницам руководства
-export function buildNav(members: Page[], prefix: string): NavItem[] {
+// Дерево навигации папки prefix («user/», «user/import/», «en/user/») по страницам руководства
+export function buildNav(members: Page[], prefix: string, lang: Lang = "ru"): NavItem[] {
   const items: NavItem[] = [];
   const subdirs = new Set<string>();
   for (const p of members) {
@@ -113,9 +125,9 @@ export function buildNav(members: Page[], prefix: string): NavItem[] {
     const sub = `${prefix}${d}/`;
     const inside = members.filter((p) => p.file.startsWith(sub));
     const index = inside.find((p) => p.file === `${sub}index.md`) ?? null;
-    items.push({ kind: "section", title: index?.title ?? d, order: index?.order ?? 1000, index, items: buildNav(inside, sub) });
+    items.push({ kind: "section", title: index?.title ?? d, order: index?.order ?? 1000, index, items: buildNav(inside, sub, lang) });
   }
-  items.sort((a, b) => navOrder(a) - navOrder(b) || navTitle(a).localeCompare(navTitle(b), "ru"));
+  items.sort((a, b) => navOrder(a) - navOrder(b) || navTitle(a).localeCompare(navTitle(b), lang));
   return items;
 }
 
@@ -142,19 +154,21 @@ export function navPath(items: NavItem[], page: Page): Extract<NavItem, { kind: 
   return [];
 }
 
-export function loadSite(root: string): Site {
-  const files = listMarkdown(root);
-  const pages = files.map((f) => loadPage(root, f));
+export function loadSite(root: string, lang: Lang = "ru"): Site {
+  const dir = LANG_DIR[lang];
+  const files = listMarkdown(root).filter((f) => langOf(f) === lang);
+  const pages = files.map((f) => loadPage(root, f, lang));
   const byFile = new Map(pages.map((p) => [p.file, p]));
-  const home = byFile.get("index.md");
-  if (!home) throw new DocsError("нет content/index.md — главной страницы документации");
+  const home = byFile.get(`${dir}index.md`);
+  if (!home) throw new DocsError(`нет content/${dir}index.md — главной страницы документации`);
 
   const guides: Guide[] = [];
   for (const p of pages) {
-    if (!/^[^/]+\/index\.md$/.test(p.file)) continue;
-    const key = p.file.slice(0, p.file.indexOf("/"));
+    const rel = p.file.slice(dir.length);
+    if (!/^[^/]+\/index\.md$/.test(rel)) continue;
+    const key = rel.slice(0, rel.indexOf("/"));
     const members = pages.filter((q) => q.guide === key);
-    const nav = buildNav(members, `${key}/`);
+    const nav = buildNav(members, `${dir}${key}/`, lang);
     guides.push({
       key,
       title: p.title,
@@ -166,19 +180,32 @@ export function loadSite(root: string): Site {
       flat: [p, ...flattenNav(nav)],
     });
   }
-  guides.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, "ru"));
+  guides.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, lang));
   for (const p of pages) {
     if (p.guide !== null && !guides.some((g) => g.key === p.guide)) {
-      throw new DocsError(`${p.file}: в папке ${p.guide}/ нет index.md — руководство без титульной страницы`);
+      throw new DocsError(`${p.file}: в папке ${dir}${p.guide}/ нет index.md — руководство без титульной страницы`);
     }
   }
-  return { home, guides, pages, byFile };
+  return { lang, home, guides, pages, byFile };
+}
+
+// Сайты всех языков: русский всегда, английский — если есть папка content/en/
+export function loadSites(root: string): Site[] {
+  const sites = [loadSite(root, "ru")];
+  if (existsSync(join(root, LANG_DIR.en))) sites.push(loadSite(root, "en"));
+  return sites;
 }
 
 export interface Validation {
   errors: string[];
   warnings: string[];
   assets: Set<string>; // файлы для копирования в сборку (пути от корня content)
+  included: Set<string>; // фрагменты, включённые в страницы этого сайта
+}
+
+// Фрагменты, которые не включены ни в одну страницу ни одного языка
+export function unusedFragments(root: string, included: Set<string>): string[] {
+  return listFragments(root).filter((f) => !included.has(f)).map((f) => `фрагмент ${f} никуда не включён`);
 }
 
 // После рендера всех страниц: ссылки ведут на существующие страницы и якоря, файлы есть,
@@ -197,7 +224,9 @@ export function validateSite(site: Site, root: string): Validation {
       if (!target) {
         const hint = l.target.split("/").some((seg) => seg.startsWith("_"))
           ? " (на фрагменты не ссылаются — только на страницы, куда они включены)"
-          : "";
+          : langOf(l.target) !== site.lang && existsSync(join(root, l.target))
+            ? " (страница другого языка — ссылки между языками не ведутся)"
+            : "";
         errors.push(`${l.from}: ссылка на несуществующую страницу «${l.raw}»${hint}`);
         continue;
       }
@@ -212,8 +241,6 @@ export function validateSite(site: Site, root: string): Validation {
       else assets.add(a.target);
     }
   }
-  for (const f of listFragments(root)) {
-    if (!included.has(f)) warnings.push(`фрагмент ${f} никуда не включён`);
-  }
-  return { errors, warnings, assets };
+  warnings.push(...unusedFragments(root, included));
+  return { errors, warnings, assets, included };
 }

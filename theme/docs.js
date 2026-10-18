@@ -4,6 +4,12 @@
 (() => {
   "use strict";
 
+  // Подписи для читателя — на языке страницы (<html lang>); кнопки автора — по-русски
+  const T = {
+    ru: { collapse: "Свернуть ветку", expand: "Развернуть ветку", copy: "Копировать", copied: "Скопировано", failed: "Не удалось", empty: "Ничего не нашлось" },
+    en: { collapse: "Collapse branch", expand: "Expand branch", copy: "Copy", copied: "Copied", failed: "Failed", empty: "No results" },
+  }[document.documentElement.lang === "en" ? "en" : "ru"];
+
   // ── Дерево страниц ──────────────────────────────────────────────────────────
   const OPEN_KEY = "docs.tree.open";
   const readOpen = () => {
@@ -30,7 +36,7 @@
       const btn = node.querySelector(":scope > .nt-row [data-toggle]");
       if (btn) {
         btn.setAttribute("aria-expanded", String(isOpen));
-        btn.setAttribute("aria-label", isOpen ? "Свернуть ветку" : "Развернуть ветку");
+        btn.setAttribute("aria-label", isOpen ? T.collapse : T.expand);
       }
     };
     // Ветки, раскрытые в разметке (путь к текущей странице), запоминаются; остальные —
@@ -74,18 +80,18 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "copy-btn";
-    btn.textContent = "Копировать";
+    btn.textContent = T.copy;
     btn.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(code.textContent.replace(/\n$/, ""));
-        btn.textContent = "Скопировано";
+        btn.textContent = T.copied;
         btn.classList.add("done");
         setTimeout(() => {
-          btn.textContent = "Копировать";
+          btn.textContent = T.copy;
           btn.classList.remove("done");
         }, 1600);
       } catch {
-        btn.textContent = "Не удалось";
+        btn.textContent = T.failed;
       }
     });
     pre.appendChild(btn);
@@ -195,7 +201,7 @@
     items = hits.slice(0, MAX);
     selected = items.length ? 0 : -1;
     if (!items.length) {
-      pop.innerHTML = '<div class="sr-empty">Ничего не нашлось</div>';
+      pop.innerHTML = '<div class="sr-empty">' + T.empty + "</div>";
     } else {
       pop.innerHTML = items.map((d, i) => (
         '<a class="sr" role="option" href="' + esc(d.url) + '" aria-selected="' + (i === selected) + '">'

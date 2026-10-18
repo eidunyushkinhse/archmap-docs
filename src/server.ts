@@ -14,14 +14,14 @@ import {
   AUTHOR_COOKIE, SESSION_COOKIE, SESSION_TTL_S, hashPassword, issueToken, loadAuthConfig, parseCookies,
   RateLimiter, verifyPassword, verifyToken, type AuthConfig,
 } from "./auth.ts";
-import { makeReader } from "./content.ts";
+import { LANG_DIR, langOf, makeReader } from "./content.ts";
 import { fmNumber, fmString, splitFrontMatter } from "./frontmatter.ts";
 import { createAutoCommitter, disabledCommitter, type AutoCommitter, type CommitInfo, type GitOptions, type GitStatus } from "./git.ts";
 import { createRenderer, DocsError, pageUrl } from "./markdown.ts";
 import { CONTENT_DIR, DATA_DIR, DIST_DIR, PKG_DIR, THEME_DIR } from "./paths.ts";
 import { renderEditor, renderLogin, SITE, type Assets } from "./render.ts";
 import { fragmentUsage, prepareSite, writeStatic, type Prepared } from "./site.ts";
-import type { FrontMatter, FrontMatterValue, NavItem, Site } from "./types.ts";
+import type { FrontMatter, FrontMatterValue, Lang, NavItem, Site } from "./types.ts";
 
 export interface ServerOptions {
   contentDir: string;
@@ -117,16 +117,29 @@ function navJson(items: NavItem[]): TreeNode[] {
   return out;
 }
 
-function treeJson(site: Site): TreeNode[] {
-  const home: TreeNode = { file: site.home.file, url: "/", title: SITE.homeLabel, description: site.home.description, kind: "home", children: [] };
+// Руководства и отдельные страницы одного языка (без главной)
+function siteJson(site: Site): TreeNode[] {
   const guides = site.guides.map((g): TreeNode => ({
     file: g.index.file, url: g.index.url, title: g.title, description: g.description, kind: "guide", children: navJson(g.nav),
   }));
   const standalone = site.pages
     .filter((p) => p.guide === null && p !== site.home)
     .map((p): TreeNode => ({ file: p.file, url: p.url, title: p.title, description: p.description, kind: "page", children: [] }));
-  return [home, ...guides, ...standalone];
+  return [...guides, ...standalone];
 }
+
+// Дерево редактора: русский сайт в корне, другие языки — узлом-веткой с их главной
+// («English» → en/index.md и руководства внутри)
+function treeJson(sites: Site[]): TreeNode[] {
+  const [main, ...others] = sites;
+  const home: TreeNode = { file: main.home.file, url: main.home.url, title: SITE.homeLabel, description: main.home.description, kind: "home", children: [] };
+  const langs = others.map((s): TreeNode => ({
+    file: s.home.file, url: s.home.url, title: LANG_TITLE[s.lang], description: s.home.description, kind: "guide", children: siteJson(s),
+  }));
+  return [home, ...siteJson(main), ...langs];
+}
+
+const LANG_TITLE: Record<Lang, string> = { ru: "Русский", en: "English" };
 
 function serializeFrontMatter(fm: FrontMatter): string {
   const order = ["title", "short", "order", "description"];
@@ -262,9 +275,14 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
   };
   const absFile = (file: string): string => join(opts.contentDir, file);
   const isFragment = (file: string): boolean => file.split("/").some((seg, i, arr) => i < arr.length - 1 && seg.startsWith("_"));
-  const site = (): Site => {
+  const sites = (): Site[] => {
     if (!prepared) throw new HttpError(503, "сайт не собран");
-    return prepared.site;
+    return prepared.sites;
+  };
+  // Сайт языка файла: ссылки страницы проверяются среди страниц её языка
+  const siteOf = (file: string): Site => {
+    const all = sites();
+    return all.find((s) => s.lang === langOf(file)) ?? all[0];
   };
 
   // ── Статика ────────────────────────────────────────────────────────────────
@@ -288,7 +306,9 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
         file = fromContent;
       } else {
         status = 404;
-        file = join(opts.distDir, "404.html");
+        // 404 своего языка: /en/… — английская, остальное — русская
+        const langNotFound = join(opts.distDir, LANG_DIR.en, "404.html");
+        file = pathname.startsWith(`/${LANG_DIR.en}`) && existsSync(langNotFound) ? langNotFound : join(opts.distDir, "404.html");
         if (!existsSync(file)) {
           res.statusCode = 404;
           res.end("404");
@@ -365,7 +385,7 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
       short: fmString(fm, "short") ?? "",
       extra,
       body,
-      usedBy: fragment ? fragmentUsage(site(), opts.contentDir).find((u) => u.file === file)?.usedBy ?? [] : [],
+      usedBy: fragment ? fragmentUsage(sites(), opts.contentDir).find((u) => u.file === file)?.usedBy ?? [] : [],
     };
   };
 
@@ -420,7 +440,7 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
   };
 
   const deletePage = async (file: string): Promise<RebuildResult & Committed> => {
-    if (file === "index.md") throw new HttpError(400, "главную страницу удалить нельзя");
+    if (file === "index.md" || file === `${LANG_DIR.en}index.md`) throw new HttpError(400, "главную страницу удалить нельзя");
     const abs = absFile(file);
     if (!existsSync(abs)) throw new HttpError(404, "файла нет");
     if (basename(file) === "index.md") {
@@ -443,8 +463,8 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
     const title = typeof input.title === "string" ? input.title : "";
     const errors: string[] = [];
     try {
-      const r = createRenderer(makeReader(opts.contentDir)).render(file, body, title);
-      const s = site();
+      const r = createRenderer(makeReader(opts.contentDir), langOf(file)).render(file, body, title);
+      const s = siteOf(file);
       for (const l of r.links) {
         const own = l.target === file;
         const target = own ? null : s.byFile.get(l.target);
@@ -487,8 +507,8 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
     requireAuthor(req);
     if (route === "GET /api/tree") {
       return json(res, 200, {
-        tree: treeJson(site()),
-        fragments: fragmentUsage(site(), opts.contentDir),
+        tree: treeJson(sites()),
+        fragments: fragmentUsage(sites(), opts.contentDir),
         errors: prepared?.errors ?? [],
         warnings: prepared?.warnings ?? [],
       });

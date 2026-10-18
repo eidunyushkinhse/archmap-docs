@@ -5,12 +5,68 @@
 // в разметке отсутствуют: их добавляет docs.js, когда видит cookie автора.
 import { navPath } from "./content.ts";
 import { escapeHtml as h } from "./html.ts";
-import type { Guide, NavItem, Page, Site } from "./types.ts";
+import type { Guide, Lang, NavItem, Page, Site } from "./types.ts";
+
+// Подписи сайта для читателя по языкам. Вход и редактор — для автора, они по-русски.
+interface Texts {
+  docsTitle: string;
+  homeLabel: string;
+  openTree: string;
+  search: string;
+  searchAria: string;
+  collapse: string;
+  expand: string;
+  treeAria: string;
+  crumbsAria: string;
+  pagerAria: string;
+  inGuide: string;
+  guides: string;
+  demo: string;
+  notFound: string;
+  notFoundLead: string;
+}
+
+export const TEXTS: Record<Lang, Texts> = {
+  ru: {
+    docsTitle: "Документация",
+    homeLabel: "Домашняя страница",
+    openTree: "Открыть дерево страниц",
+    search: "Поиск",
+    searchAria: "Поиск по документации",
+    collapse: "Свернуть ветку",
+    expand: "Развернуть ветку",
+    treeAria: "Страницы документации",
+    crumbsAria: "Путь",
+    pagerAria: "Соседние страницы",
+    inGuide: "В этом руководстве",
+    guides: "Руководства",
+    demo: "Демо-стенд",
+    notFound: "Страница не найдена",
+    notFoundLead: "Такой страницы в документации нет — возможно, она переехала. Выберите нужную в дереве слева или воспользуйтесь поиском.",
+  },
+  en: {
+    docsTitle: "Documentation",
+    homeLabel: "Home",
+    openTree: "Open the page tree",
+    search: "Search",
+    searchAria: "Search the documentation",
+    collapse: "Collapse branch",
+    expand: "Expand branch",
+    treeAria: "Documentation pages",
+    crumbsAria: "Breadcrumbs",
+    pagerAria: "Adjacent pages",
+    inGuide: "In this guide",
+    guides: "Guides",
+    demo: "Demo",
+    notFound: "Page not found",
+    notFoundLead: "This page is not in the documentation; it may have moved. Choose a page in the tree on the left or use the search.",
+  },
+};
 
 export const SITE = {
   name: "ArchMap",
-  docsTitle: "Документация",
-  homeLabel: "Домашняя страница",
+  docsTitle: TEXTS.ru.docsTitle,
+  homeLabel: TEXTS.ru.homeLabel,
   productUrl: "https://archmap.tech",
   demoUrl: "https://demo.archmap.tech",
   repoUrl: "https://github.com/eidunyushkinhse/archmap",
@@ -24,7 +80,7 @@ export interface Assets {
   editorCss: string;
   editorJs: string;
   favicon: string;
-  search: string;
+  search: Partial<Record<Lang, string>>; // индекс поиска своего языка
 }
 
 const LOGO =
@@ -45,9 +101,9 @@ const GLYPH_HOME = `<span class="nt-glyph nt-glyph--lead"><svg width="14" height
 const CHEVRON =
   '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6 L15 12 L9 18"/></svg>';
 
-export function head(title: string, description: string, a: Assets, extraCss = ""): string {
+export function head(title: string, description: string, a: Assets, extraCss = "", lang: Lang = "ru"): string {
   return `<!doctype html>
-<html lang="ru">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -61,15 +117,17 @@ ${extraCss ? `<link rel="stylesheet" href="${extraCss}">` : ""}
 }
 
 // Шапка: логотип, «Документация», поиск. Правый край — слот автора (заполняет docs.js).
-export function header(withMenu: boolean, withSearch: boolean, subtitle = SITE.docsTitle): string {
+// Логотип ведёт на главную своего языка.
+export function header(withMenu: boolean, withSearch: boolean, subtitle?: string, lang: Lang = "ru"): string {
+  const t = TEXTS[lang];
   return `<header class="top">
 <div class="top-in">
-${withMenu ? `<button type="button" class="menu-btn" data-menu aria-label="Открыть дерево страниц" aria-expanded="false">${ICON_MENU}</button>` : ""}
-<a class="brand" href="/">${LOGO}<span class="brand-word">Arch<b>Map</b></span><span class="brand-div"></span><span class="brand-sub">${h(subtitle)}</span></a>
+${withMenu ? `<button type="button" class="menu-btn" data-menu aria-label="${h(t.openTree)}" aria-expanded="false">${ICON_MENU}</button>` : ""}
+<a class="brand" href="${lang === "ru" ? "/" : `/${lang}/`}">${LOGO}<span class="brand-word">Arch<b>Map</b></span><span class="brand-div"></span><span class="brand-sub">${h(subtitle ?? t.docsTitle)}</span></a>
 <div class="top-right">
 ${withSearch ? `<div class="search" data-search>
 <span class="search-ico">${ICON_SEARCH}</span>
-<input type="search" placeholder="Поиск" aria-label="Поиск по документации" autocomplete="off" spellcheck="false">
+<input type="search" placeholder="${h(t.search)}" aria-label="${h(t.searchAria)}" autocomplete="off" spellcheck="false">
 <kbd class="search-kbd" aria-hidden="true">Ctrl K</kbd>
 <div class="search-pop" role="listbox" hidden></div>
 </div>` : ""}
@@ -82,9 +140,10 @@ ${withSearch ? `<div class="search" data-search>
 // ── Дерево страниц (стиль дерева объектов продукта) ──────────────────────────────
 function treeRow(opts: { page: Page; label: string; glyph?: string; current: boolean; children: string; open: boolean; container: boolean }): string {
   const { page, label, glyph, current, children, open, container } = opts;
+  const t = TEXTS[page.lang];
   // Глиф (дом у главной) стоит в колонке шевронов: имя выровнено с именами руководств
   const chev = children
-    ? `<button type="button" class="nt-chevzone" data-toggle aria-expanded="${open}" aria-label="${open ? "Свернуть ветку" : "Развернуть ветку"}"><span class="nt-chevhit"><span class="nt-chev">${CHEVRON}</span></span></button>`
+    ? `<button type="button" class="nt-chevzone" data-toggle aria-expanded="${open}" aria-label="${h(open ? t.collapse : t.expand)}"><span class="nt-chevhit"><span class="nt-chev">${CHEVRON}</span></span></button>`
     : glyph ? "" : '<span class="nt-chevspacer"></span>';
   return `<div class="nt-node${open ? " nt-node--open" : ""}" data-file="${h(page.file)}">
 <div class="nt-row${current ? " nt-row--current" : ""}">${chev}<a class="nt-link" href="${page.url}"${current ? ' aria-current="page"' : ""}>${glyph ?? ""}<span class="nt-name${container ? " nt-name--container" : ""}">${h(label)}</span></a></div>
@@ -123,7 +182,8 @@ function openBranches(site: Site, active: Page | null): Set<string> {
 
 export function treeHtml(site: Site, active: Page | null): string {
   const open = openBranches(site, active);
-  const home = treeRow({ page: site.home, label: SITE.homeLabel, glyph: GLYPH_HOME, current: site.home === active, children: "", open: false, container: false });
+  const t = TEXTS[site.lang];
+  const home = treeRow({ page: site.home, label: t.homeLabel, glyph: GLYPH_HOME, current: site.home === active, children: "", open: false, container: false });
   const guides = site.guides
     .map((g) => treeRow({ page: g.index, label: g.title, current: g.index === active, children: navTree(g.nav, active, open), open: open.has(g.index.file), container: true }))
     .join("");
@@ -131,27 +191,27 @@ export function treeHtml(site: Site, active: Page | null): string {
     .filter((p) => p.guide === null && p !== site.home)
     .map((p) => treeRow({ page: p, label: p.title, current: p === active, children: "", open: false, container: false }))
     .join("");
-  return `<nav class="tree" aria-label="Страницы документации">${home}${guides}${standalone}</nav>`;
+  return `<nav class="tree" aria-label="${h(t.treeAria)}">${home}${guides}${standalone}</nav>`;
 }
 
-function crumbs(parts: { title: string; url: string | null }[]): string {
+function crumbs(parts: { title: string; url: string | null }[], t: Texts): string {
   const items = parts.map((p, i) => {
     const last = i === parts.length - 1;
     const node = p.url && !last ? `<a href="${p.url}">${h(p.title)}</a>` : `<span${last ? ' aria-current="page"' : ""}>${h(p.title)}</span>`;
     return (i ? '<span class="crumb-sep" aria-hidden="true">›</span>' : "") + node;
   });
-  return `<nav class="crumbs" aria-label="Путь">${items.join("")}</nav>`;
+  return `<nav class="crumbs" aria-label="${h(t.crumbsAria)}">${items.join("")}</nav>`;
 }
 
-function pager(prev: Page | null, next: Page | null): string {
+function pager(prev: Page | null, next: Page | null, t: Texts): string {
   if (!prev && !next) return "";
   const p = prev ? `<a class="pager-prev" href="${prev.url}" rel="prev">← ${h(prev.title)}</a>` : "<span></span>";
   const n = next ? `<a class="pager-next" href="${next.url}" rel="next">${h(next.title)} →</a>` : "<span></span>";
-  return `<nav class="pager" aria-label="Соседние страницы">${p}${n}</nav>`;
+  return `<nav class="pager" aria-label="${h(t.pagerAria)}">${p}${n}</nav>`;
 }
 
 // Список разделов на титульной странице руководства — из навигации, руками не ведётся
-function guideSections(guide: Guide): string {
+function guideSections(guide: Guide, t: Texts): string {
   const items = guide.nav.map((it) => {
     const page = it.kind === "page" ? it.page : it.index ?? (it.items.find((x) => x.kind === "page") as Extract<NavItem, { kind: "page" }> | undefined)?.page;
     if (!page) return "";
@@ -160,31 +220,32 @@ function guideSections(guide: Guide): string {
     return `<li><a href="${page.url}">${h(title)}</a>${desc ? `<span class="sec-desc">${h(desc)}</span>` : ""}</li>`;
   });
   if (!items.length) return "";
-  return `<section class="sections"><h2 class="sections-title">В этом руководстве</h2><ul class="sec-list">${items.join("")}</ul></section>`;
+  return `<section class="sections"><h2 class="sections-title">${h(t.inGuide)}</h2><ul class="sec-list">${items.join("")}</ul></section>`;
 }
 
 // Список руководств на главной
-function homeGuides(site: Site): string {
+function homeGuides(site: Site, t: Texts): string {
   const items = site.guides
     .map((g) => `<li><a href="${g.index.url}">${h(g.title)}</a>${g.description ? `<span class="sec-desc">${h(g.description)}</span>` : ""}</li>`)
     .join("");
-  return items ? `<section class="sections"><h2 class="sections-title">Руководства</h2><ul class="sec-list">${items}</ul></section>` : "";
+  return items ? `<section class="sections"><h2 class="sections-title">${h(t.guides)}</h2><ul class="sec-list">${items}</ul></section>` : "";
 }
 
-function footer(): string {
+function footer(t: Texts): string {
   return `<footer class="foot"><div class="foot-in">
-<span>${h(SITE.name)} · ${h(SITE.docsTitle)}</span>
-<span class="foot-links"><a href="${SITE.productUrl}">archmap.tech</a><a href="${SITE.demoUrl}">Демо-стенд</a><a href="${SITE.repoUrl}">GitHub</a></span>
+<span>${h(SITE.name)} · ${h(t.docsTitle)}</span>
+<span class="foot-links"><a href="${SITE.productUrl}">archmap.tech</a><a href="${SITE.demoUrl}">${h(t.demo)}</a><a href="${SITE.repoUrl}">GitHub</a></span>
 </div></footer>`;
 }
 
 // Любая страница: дерево слева, статья справа
 export function renderPage(site: Site, page: Page, prev: Page | null, next: Page | null, a: Assets): string {
   const r = page.render;
+  const t = TEXTS[site.lang];
   const guide = site.guides.find((g) => g.key === page.guide) ?? null;
   const isHome = page === site.home;
   const isGuideIndex = guide?.index === page;
-  const crumbParts: { title: string; url: string | null }[] = [{ title: SITE.homeLabel, url: "/" }];
+  const crumbParts: { title: string; url: string | null }[] = [{ title: t.homeLabel, url: site.home.url }];
   if (guide) {
     crumbParts.push({ title: guide.title, url: guide.index.url });
     for (const s of navPath(guide.nav, page)) crumbParts.push({ title: s.title, url: s.index?.url ?? null });
@@ -193,25 +254,25 @@ export function renderPage(site: Site, page: Page, prev: Page | null, next: Page
   if (isGuideIndex) crumbParts.pop();
   if (isGuideIndex && guide) crumbParts.push({ title: guide.title, url: null });
   const title = isHome ? `${page.title}` : guide && !isGuideIndex ? `${page.title} · ${guide.title} · ${SITE.name}` : `${page.title} · ${SITE.name}`;
-  return `${head(title, page.description, a)}
-<body class="docs" data-search-url="${a.search}" data-file="${h(page.file)}">
-${header(true, true)}
+  return `${head(title, page.description, a, "", site.lang)}
+<body class="docs" data-search-url="${a.search[site.lang] ?? ""}" data-file="${h(page.file)}">
+${header(true, true, undefined, site.lang)}
 <div class="shell">
 <aside class="side" id="side">${treeHtml(site, page)}</aside>
 <main class="main" id="main">
-${isHome ? "" : crumbs(crumbParts)}
+${isHome ? "" : crumbs(crumbParts, t)}
 <article class="article">
 <h1>${h(page.title)}</h1>
 ${page.description ? `<p class="lead">${h(page.description)}</p>` : ""}
 ${r?.html ?? ""}
-${isHome ? homeGuides(site) : ""}
-${isGuideIndex && guide ? guideSections(guide) : ""}
+${isHome ? homeGuides(site, t) : ""}
+${isGuideIndex && guide ? guideSections(guide, t) : ""}
 </article>
-${pager(prev, next)}
+${pager(prev, next, t)}
 </main>
 </div>
 <div class="side-backdrop" data-menu-close></div>
-${footer()}
+${footer(t)}
 <script src="${a.js}" defer></script>
 </body>
 </html>
@@ -219,20 +280,21 @@ ${footer()}
 }
 
 export function renderNotFound(site: Site, a: Assets): string {
-  return `${head(`Страница не найдена · ${SITE.name}`, "", a)}
-<body class="docs" data-search-url="${a.search}">
-${header(true, true)}
+  const t = TEXTS[site.lang];
+  return `${head(`${t.notFound} · ${SITE.name}`, "", a, "", site.lang)}
+<body class="docs" data-search-url="${a.search[site.lang] ?? ""}">
+${header(true, true, undefined, site.lang)}
 <div class="shell">
 <aside class="side" id="side">${treeHtml(site, null)}</aside>
 <main class="main" id="main">
 <article class="article">
-<h1>Страница не найдена</h1>
-<p class="lead">Такой страницы в документации нет — возможно, она переехала. Выберите нужную в дереве слева или воспользуйтесь поиском.</p>
+<h1>${h(t.notFound)}</h1>
+<p class="lead">${h(t.notFoundLead)}</p>
 </article>
 </main>
 </div>
 <div class="side-backdrop" data-menu-close></div>
-${footer()}
+${footer(t)}
 <script src="${a.js}" defer></script>
 </body>
 </html>

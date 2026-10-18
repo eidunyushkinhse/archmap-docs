@@ -104,6 +104,14 @@ describe("разметка", () => {
     assert.match(out.html, /«в кавычках»/);
   });
 
+  it("английский рендер: подписи блоков и кавычки по-английски", () => {
+    const en = createRenderer(reader({}), "en");
+    const out = en.render("en/p.md", '::: note\ntext\n:::\n\n::: details\nhidden\n:::\n\nA "quoted" word.\n', "P");
+    assert.match(out.html, /callout-note"><p class="callout-title">Note<\/p>/);
+    assert.match(out.html, /<summary>More<\/summary>/);
+    assert.match(out.html, /“quoted”/);
+  });
+
   it("поисковые куски режутся по h2/h3 и несут якорь", () => {
     const out = r.render("p.md", "вводный текст\n\n## Раздел\n\nтело раздела\n\n### Подраздел\n\nещё\n", "Страница");
     assert.deepEqual(out.sections, [

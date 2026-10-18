@@ -30,8 +30,9 @@ function main(): void {
   for (const w of prepared.warnings) console.warn(`предупреждение: ${w}`);
   for (const e of prepared.errors) console.error(`ошибка: ${e}`);
   const status = prepared.errors.length ? `ошибок: ${prepared.errors.length} — сборка отклонена` : "без ошибок";
-  console.log(`Документация: страниц ${prepared.site.pages.length}, ${status}.`);
-  if (values.report) console.log(`Фрагменты (единый источник истины):\n${fragmentReport(prepared.site, CONTENT_DIR)}`);
+  const pages = prepared.sites.reduce((n, s) => n + s.pages.length, 0);
+  console.log(`Документация: страниц ${pages}, ${status}.`);
+  if (values.report) console.log(`Фрагменты (единый источник истины):\n${fragmentReport(prepared.sites, CONTENT_DIR)}`);
   if (prepared.errors.length) process.exit(1);
 }
 

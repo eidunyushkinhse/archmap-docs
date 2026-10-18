@@ -45,6 +45,9 @@ describe("сервер документации", () => {
       "content/user/a.md": "---\ntitle: Страница А\norder: 1\n---\n<!--@include: ../_shared/f.md-->\n\nСм. [Б](b.md#тут).\n",
       "content/user/b.md": "---\ntitle: Страница Б\norder: 2\n---\n## Тут\n",
       "content/_shared/f.md": "## Фрагмент\n",
+      "content/en/index.md": "---\ntitle: Documentation\n---\nhome\n",
+      "content/en/user/index.md": "---\ntitle: User guide\nshort: User\norder: 1\n---\nintro\n",
+      "content/en/user/a.md": "---\ntitle: Page A\n---\n::: note\nsee \"Page A\"\n:::\n\n## Here\n",
     });
     srv = await startServer({
       contentDir: join(root, "content"),
@@ -78,6 +81,29 @@ describe("сервер документации", () => {
     assert.deepEqual(await (await get("/api/me")).json(), { author: false });
   });
 
+  it("английская версия: адреса /en/, lang, подписи и кавычки, свой поиск и 404", async () => {
+    const page = await get("/en/user/a/");
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /<html lang="en">/);
+    assert.match(html, /class="nt-name">Home<\/span>/);
+    assert.match(html, /placeholder="Search"/);
+    assert.match(html, /<a class="brand" href="\/en\/">/);
+    assert.match(html, /callout-title">Note<\/p>\s*<p>see “Page A”<\/p>/);
+    assert.doesNotMatch(html, /Руководство пользователя/);
+    const url = /data-search-url="([^"]+)"/.exec(html)?.[1] ?? "";
+    assert.match(url, /^\/assets\/search-en\.json\?v=/);
+    const index: { url: string }[] = await (await get(url)).json();
+    assert.ok(index.length > 0 && index.every((d) => d.url.startsWith("/en/")));
+    const ruHtml = await (await get("/user/a/")).text();
+    assert.match(ruHtml, /<html lang="ru">/);
+    assert.match(ruHtml, /data-search-url="\/assets\/search\.json\?v=/);
+    const nf = await get("/en/nope/");
+    assert.equal(nf.status, 404);
+    assert.match(await nf.text(), /Page not found/);
+    assert.match(await (await get("/nope/")).text(), /Страница не найдена/);
+  });
+
   it("вход: страница без ссылок с сайта, неверный пароль — 401, верный — cookie и редирект", async () => {
     const page = await get("/login?next=/edit/");
     assert.equal(page.status, 200);
@@ -101,8 +127,10 @@ describe("сервер документации", () => {
 
   it("API: дерево и фрагменты, чтение страницы, предпросмотр с проверкой ссылок", async () => {
     const t = await (await get("/api/tree", true)).json();
-    assert.deepEqual(t.tree.map((n: { title: string; kind: string }) => [n.title, n.kind]), [["Домашняя страница", "home"], ["Руководство пользователя", "guide"]]);
+    assert.deepEqual(t.tree.map((n: { title: string; kind: string }) => [n.title, n.kind]), [["Домашняя страница", "home"], ["Руководство пользователя", "guide"], ["English", "guide"]]);
     assert.deepEqual(t.tree[1].children.map((n: { file: string }) => n.file), ["user/a.md", "user/b.md"]);
+    assert.equal(t.tree[2].file, "en/index.md");
+    assert.deepEqual(t.tree[2].children.map((n: { file: string }) => n.file), ["en/user/index.md"]);
     assert.deepEqual(t.fragments, [{ file: "_shared/f.md", usedBy: ["user/a.md"] }]);
     const p = await (await get("/api/page?file=user%2Fa.md", true)).json();
     assert.equal(p.title, "Страница А");
@@ -116,6 +144,10 @@ describe("сервер документации", () => {
     const pv = await (await call("POST", "/api/preview", { file: "user/a.md", title: "А", body: "[x](b.md#нет) [y](b.md#тут) [z](zzz.md)" })).json();
     assert.match(pv.html, /href="\/user\/b\/#нет"/);
     assert.deepEqual(pv.errors, ["якорь «#нет» не найден (user/b.md)", "ссылка на несуществующую страницу «zzz.md»"]);
+    // Английская страница: подписи блоков по-английски, ссылки проверяются среди английских
+    const en = await (await call("POST", "/api/preview", { file: "en/user/a.md", title: "A", body: "::: note\nx\n:::\n\n[ok](index.md) [ru](../../user/b.md)" })).json();
+    assert.match(en.html, /callout-title">Note</);
+    assert.deepEqual(en.errors, ["ссылка на несуществующую страницу «../../user/b.md»"]);
   });
 
   it("API: правка сохраняет файл и пересобирает сайт; без заголовка X-Requested-With — 403", async () => {
@@ -153,6 +185,7 @@ describe("сервер документации", () => {
     assert.equal((await call("POST", "/api/page", { kind: "page", parent: "", slug: "Bad Slug", title: "X" })).status, 400);
     // Удаление
     assert.equal((await call("DELETE", "/api/page?file=index.md")).status, 400);
+    assert.equal((await call("DELETE", "/api/page?file=en%2Findex.md")).status, 400);
     assert.equal((await call("DELETE", "/api/page?file=user%2Fsec%2Findex.md")).status, 409);
     assert.equal((await call("DELETE", "/api/page?file=user%2Fsec%2Finside.md")).status, 200);
     assert.equal((await call("DELETE", "/api/page?file=user%2Fsec%2Findex.md")).status, 200);

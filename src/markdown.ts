@@ -6,6 +6,7 @@
 //    после сборки всех страниц), якоря — «#id»; заголовки получают id из текста или явный {#id}.
 //  - Картинки — относительными путями; подпись — из title: ![alt](путь "подпись").
 //  - Блоки ::: note | tip | warning | danger | details (с необязательным заголовком).
+//  - Язык рендерера (ru/en) задаёт подписи блоков по умолчанию и кавычки типографа.
 import { posix } from "node:path";
 import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
@@ -29,7 +30,7 @@ import langYaml from "highlight.js/lib/languages/yaml";
 import { splitFrontMatter } from "./frontmatter.ts";
 import { escapeHtml } from "./html.ts";
 import { SlugSet, slugify } from "./slug.ts";
-import type { AssetRef, Heading, LinkRef, RenderResult, SearchSection } from "./types.ts";
+import type { AssetRef, Heading, Lang, LinkRef, RenderResult, SearchSection } from "./types.ts";
 
 // Ошибка содержимого (не программы): сборка перечисляет такие и останавливается
 export class DocsError extends Error {}
@@ -42,6 +43,7 @@ export interface SourceReader {
 // Окружение одного рендера. Массивы общие для страницы и всех её фрагментов; file и stack
 // свои у каждого включения.
 interface Env {
+  lang: Lang;
   page: string;
   file: string;
   stack: string[];
@@ -58,12 +60,12 @@ function isEnv(v: unknown): v is Env {
 
 const INCLUDE_RE = /^<!--\s*@include:\s*(\S+)\s*-->\s*$/;
 const CUSTOM_ID_RE = /\s*\{#([\p{L}\p{N}_-]+)\}\s*$/u;
-const CALLOUTS: Record<string, string> = {
-  note: "Примечание",
-  tip: "Совет",
-  warning: "Внимание",
-  danger: "Осторожно",
+// Заголовки блоков по умолчанию (details — подпись свёрнутого блока) и кавычки типографа
+const CALLOUTS: Record<Lang, Record<string, string>> = {
+  ru: { note: "Примечание", tip: "Совет", warning: "Внимание", danger: "Осторожно", details: "Подробнее" },
+  en: { note: "Note", tip: "Tip", warning: "Warning", danger: "Caution", details: "More" },
 };
+const QUOTES: Record<Lang, string> = { ru: "«»„“", en: "“”‘’" };
 
 for (const [name, lang] of Object.entries({
   bash: langBash, diff: langDiff, dockerfile: langDockerfile, ini: langIni, javascript: langJavascript,
@@ -322,12 +324,13 @@ function containerRule(state: StateBlock, startLine: number, endLine: number, si
   return true;
 }
 
-const containerOpenRender: RenderRule = (tokens, idx) => {
+const containerOpenRender: RenderRule = (tokens, idx, _options, env) => {
   const t = tokens[idx];
+  const titles = CALLOUTS[isEnv(env) ? env.lang : "ru"];
   if (t.info === "details") {
-    return `<details class="details"><summary>${escapeHtml(t.content || "Подробнее")}</summary>\n`;
+    return `<details class="details"><summary>${escapeHtml(t.content || titles.details)}</summary>\n`;
   }
-  const title = t.content || CALLOUTS[t.info];
+  const title = t.content || titles[t.info];
   return `<div class="callout callout-${t.info}"><p class="callout-title">${escapeHtml(title)}</p>\n`;
 };
 
@@ -368,8 +371,8 @@ export interface Renderer_ {
   render(file: string, body: string, title: string): RenderResult;
 }
 
-export function createRenderer(reader: SourceReader): Renderer_ {
-  const md = new MarkdownIt({ html: true, linkify: true, typographer: true, quotes: "«»„“", highlight });
+export function createRenderer(reader: SourceReader, lang: Lang = "ru"): Renderer_ {
+  const md = new MarkdownIt({ html: true, linkify: true, typographer: true, quotes: QUOTES[lang], highlight });
   md.block.ruler.before(
     "html_block",
     "docs_include",
@@ -392,7 +395,7 @@ export function createRenderer(reader: SourceReader): Renderer_ {
   return {
     render(file, body, title) {
       const env: Env = {
-        page: file, file, stack: [file],
+        lang, page: file, file, stack: [file],
         headings: [], links: [], assets: [], includes: [], slugs: new SlugSet(),
       };
       const tokens = md.parse(body, env);

@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { flattenNav, listFragments, listMarkdown, loadSite, makeReader, navPath, validateSite } from "./content.ts";
+import { flattenNav, listFragments, listMarkdown, loadSite, loadSites, makeReader, navPath, validateSite } from "./content.ts";
 import { createRenderer } from "./markdown.ts";
 
 function tree(files: Record<string, string>): string {
@@ -65,5 +65,45 @@ describe("loadSite", () => {
     ]);
     assert.deepEqual(v.warnings, ["фрагмент _shared/unused.md никуда не включён"]);
     assert.deepEqual([...v.assets], []);
+  });
+
+  it("без папки en/ — только русский сайт", () => {
+    assert.deepEqual(loadSites(root).map((s) => s.lang), ["ru"]);
+  });
+});
+
+describe("языки", () => {
+  let root = "";
+  before(() => {
+    root = tree({
+      "index.md": "---\ntitle: Документация\n---\n",
+      "user/index.md": "---\ntitle: Руководство пользователя\norder: 1\n---\n",
+      "user/a.md": "---\ntitle: А\n---\n",
+      "en/index.md": "---\ntitle: Documentation\n---\n",
+      "en/user/index.md": "---\ntitle: User guide\nshort: User\norder: 1\n---\n",
+      "en/user/b.md": "---\ntitle: Bee\norder: 2\n---\n",
+      "en/user/a.md": "---\ntitle: Ay\norder: 1\n---\n[bee](b.md) [ru](../../user/a.md)\n",
+    });
+  });
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  it("русский сайт — без en/, английский — из en/ с адресами /en/ и тем же ключом руководства", () => {
+    const [ru, en] = loadSites(root);
+    assert.equal(ru.lang, "ru");
+    assert.deepEqual(ru.pages.map((p) => p.file), ["index.md", "user/a.md", "user/index.md"]);
+    assert.equal(en.lang, "en");
+    assert.equal(en.home.url, "/en/");
+    assert.deepEqual(en.guides.map((g) => [g.key, g.short, g.index.url]), [["user", "User", "/en/user/"]]);
+    assert.deepEqual(flattenNav(en.guides[0].nav).map((p) => p.url), ["/en/user/a/", "/en/user/b/"]);
+    assert.ok(en.pages.every((p) => p.lang === "en"));
+  });
+
+  it("ссылка на страницу другого языка — ошибка с подсказкой", () => {
+    const en = loadSite(root, "en");
+    const renderer = createRenderer(makeReader(root), "en");
+    for (const p of en.pages) p.render = renderer.render(p.file, p.body, p.title);
+    assert.deepEqual(validateSite(en, root).errors, [
+      "en/user/a.md: ссылка на несуществующую страницу «../../user/a.md» (страница другого языка — ссылки между языками не ведутся)",
+    ]);
   });
 });

@@ -1,5 +1,8 @@
 // Типы содержимого документации: страницы, руководства, навигация, ссылки.
 
+// Язык сайта: русский — корень content/, английский — content/en/ (адреса /en/…)
+export type Lang = "ru" | "en";
+
 export type FrontMatterValue = string | number | boolean;
 export type FrontMatter = Record<string, FrontMatterValue>;
 
@@ -43,13 +46,14 @@ export interface RenderResult {
 }
 
 export interface Page {
-  file: string;         // путь от корня content, posix: «user/navigation.md»
-  url: string;          // «/user/navigation/»
+  file: string;         // путь от корня content, posix: «user/navigation.md», «en/user/navigation.md»
+  url: string;          // «/user/navigation/», «/en/user/navigation/»
+  lang: Lang;
   title: string;
   description: string;
   order: number;
   fm: FrontMatter;
-  guide: string | null; // ключ руководства (папка верхнего уровня) или null у корневых страниц
+  guide: string | null; // ключ руководства (папка верхнего уровня языка) или null у корневых страниц
   body: string;         // Markdown без фронтматтера
   render: RenderResult | null;
 }
@@ -69,7 +73,9 @@ export interface Guide {
   flat: Page[];         // титульная страница и все страницы в порядке навигации (prev/next)
 }
 
+// Сайт одного языка: свои главная, руководства, дерево и поиск
 export interface Site {
+  lang: Lang;
   home: Page;
   guides: Guide[];
   pages: Page[];
