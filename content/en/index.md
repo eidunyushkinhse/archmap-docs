@@ -12,4 +12,4 @@ For architects, the agent helps document the system. Given access to the source 
 AI-assisted documentation is in beta. Review the agent's output and correct it manually where needed.
 :::
 
-The documentation is organized by role. Pick a guide from the tree on the left or use the search at the top of the page. So far, only the user guide is available in English.
+The documentation is organized by role. Pick a guide from the tree on the left or use the search at the top of the page.
