@@ -13,7 +13,7 @@ To view a message broker's channels, follow these steps:
 
 1. Open the broker page (see [Find service documentation](find-service.md)) and scroll down to the **Channels** section.
 2. Click the arrow next to a channel name to expand it. The delivery settings, message fields, and the **Publishers / consumers** list appear.
-3. In the **Publishers / consumers** list, see which services and logic diagrams publish to the channel or consume from it.
+3. In the **Publishers / consumers** list, find the services that publish to the channel or consume from it, and the logic diagrams that describe this.
 
 ![Channels section](../images/facts-channels.png "The Channels section of the Kafka broker with the orders.events channel expanded")
 

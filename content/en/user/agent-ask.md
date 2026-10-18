@@ -14,7 +14,7 @@ To ask a question about the system, follow these steps:
 1. Start an agent with the ArchMap MCP server connected (see [Connect an AI agent to ArchMap](agent-setup.md)).
 2. Write your question and include the project name. If you don't remember the name, ask the agent to list your projects first.
 3. Send the question. The agent searches the documentation and answers with references to its sources: the object's path, the logic diagram name, and the line number.
-4. Double-check important conclusions in ArchMap: open the object page and the diagram that the agent refers to (see [Find service documentation](find-service.md), [View operation and worker logic](logic.md)).
+4. Double-check important conclusions in ArchMap. To do this, open the object page and the diagram that the agent refers to (see [Find service documentation](find-service.md), [View operation and worker logic](logic.md)).
 
 ::: note
 Example questions:

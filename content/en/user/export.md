@@ -21,7 +21,7 @@ To export the diagram as YAML, follow these steps:
 ![Diagram actions menu](../images/export-menu.png "The Diagram actions menu on the project page")
 
 ::: note
-The YAML includes the objects (name, type, role, technology, description, and source) and the relationships between them. It doesn't include logic diagrams, specifications, database structures, channels, configuration, or processes: these are in the project archive.
+The YAML includes the objects (name, type, role, technology, description, and source) and the relationships between them. Logic diagrams, specifications, database structures, channels, configuration, and processes are only in the project archive.
 :::
 
 ## Download the project archive

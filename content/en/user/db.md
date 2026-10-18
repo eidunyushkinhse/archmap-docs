@@ -13,7 +13,7 @@ To view a database's structure, follow these steps:
 
 1. Open the database page (see [Find service documentation](find-service.md)) and scroll down to the **Structure** section.
 2. Click the arrow next to a table name to expand it. The table's columns and the **Accessed by** list appear.
-3. In the **Accessed by** list, find the table or column you're interested in. Each row shows the service and the logic diagram that read or write it.
+3. In the **Accessed by** list, find the table or column you're interested in. Each row shows a service that reads or writes it and the logic diagram that describes this access.
 
 ![Structure section](../images/facts-db.png "The Structure section of Orders DB with the orders table expanded")
 

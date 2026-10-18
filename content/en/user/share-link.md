@@ -26,7 +26,7 @@ If the recipient isn't signed in to ArchMap, they are asked to sign in first, an
 :::
 
 ::: note
-Business processes don't have links of their own. Share the project link and tell the recipient the process name: they can open it with the **Processes** button (see [View a business process](processes.md)).
+Business processes don't have links of their own. Share the project link and tell the recipient the process name. They can open it with the **Processes** button (see [View a business process](processes.md)).
 :::
 
 ::: note

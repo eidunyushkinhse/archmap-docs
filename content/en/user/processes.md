@@ -38,7 +38,7 @@ To read a process diagram, follow these steps:
 3. To open a participant's page, hover over its name at the top of the diagram and click the arrow that appears.
 
 ::: note
-Labels without an underline can't be clicked: no logic diagram is linked to the step.
+Labels without an underline can't be clicked, because no logic diagram is linked to the step.
 :::
 
 ::: note

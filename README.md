@@ -248,7 +248,9 @@ Warning, Caution) и страница 404. Ссылки между языкам�
 «Activate the diagram. To do this, click it»; «Search results don't show where an object is in the
 tree», а не «The list of results does not show where an object is in the tree»). Заголовки
 страниц — тоже по-английски естественные: «View service configuration», «Find a service's
-source code». Читатели в английском тексте — viewers; MCP — «via MCP».
+source code». Читатели в английском тексте — viewers; MCP — «via MCP». Роли проекта — Owner,
+Editor, Reader; общие роли учётной записи — Architect и Viewer (в словаре `ui.json` слово
+«Пользователь» занято формой объекта Person).
 
 Безличные и страдательные обороты о действиях читателя и в английском не используются:
 «You can add relationships in the diagram editor», а не «Relationships are added in the editor».
