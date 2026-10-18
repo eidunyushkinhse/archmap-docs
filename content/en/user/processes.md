@@ -4,7 +4,7 @@ order: 11
 ---
 
 ::: note
-A business process shows, step by step, how services interact in one scenario (for example, when an order is paid): who calls whom, what they reply, and what events they publish. A process is drawn as a sequence diagram: the participants are at the top, and the steps go from top to bottom.
+A business process shows step by step how services interact in a single scenario, such as paying for an order: who calls whom, how they respond, and which events they publish. Processes are drawn as sequence diagrams, with participants across the top and steps running from top to bottom.
 :::
 
 ## Open a process
@@ -12,53 +12,53 @@ A business process shows, step by step, how services interact in one scenario (f
 To open a business process, follow these steps:
 
 1. Open the project (see [Find a project and explore the system](find-project.md)).
-2. In the upper-right corner, click **Processes**. The list of the project's processes opens on the left.
-3. Click a process in the list. Its diagram appears on the right.
+2. Click **Processes** in the upper-right corner. The project's processes are listed on the left.
+3. Click a process. Its diagram appears on the right.
 
-![Business process](../images/process-view.png "The Order payment process: participants at the top, steps in numbered order")
+![Business process](../images/process-view.png "The Order payment process: participants across the top and numbered steps below")
 
 ::: note
-You can also open a process from other pages:
-- on the project page, in the **Business processes** section;
-- on a service page, in the **Participates in processes** section;
-- in a logic diagram window, in the **Used in processes** line.
+You can also open a process from:
+- the **Business processes** section on the project page;
+- the **Participates in processes** section on a service page;
+- the **Used in processes** line in a logic diagram window.
 
-The **Objects** button in the upper-right corner returns you to the system diagram.
+To return to the system diagram, click **Objects** in the upper-right corner.
 :::
 
 ## Read the diagram
 
 To read a process diagram, follow these steps:
 
-1. Follow the steps in numbered order. The arrow style shows the type of step:
-    - solid line with a filled arrowhead: a call;
-    - dashed line: a reply to a call;
-    - solid line with an open arrowhead: an event (for example, publishing a message to a broker).
-2. On the diagram, open the logic diagram of a step. To do this, click its underlined label. A window opens with the logic diagram of the operation that performs the step (see [View the logic of an operation or worker](logic.md)).
-3. Above the diagram, open the page of a participant. To do this, hover over its name and click the arrow that appears. The object page opens.
+1. Follow the steps in numerical order. The arrow style shows the type of step:
+    - a solid line with a filled arrowhead is a call;
+    - a dashed line is a response;
+    - a solid line with an open arrowhead is an event (for example, a message published to a broker).
+2. To see the logic behind a step, click its underlined label. A window opens with the logic diagram of the operation that performs the step (see [View operation and worker logic](logic.md)).
+3. To open a participant's page, hover over its name at the top of the diagram and click the arrow that appears.
 
 ::: note
-A step label without an underline does not open: no logic diagram is bound to the step.
+Labels without an underline can't be clicked: no logic diagram is linked to the step.
 :::
 
 ::: note
-A frame with a label in its upper-left corner groups steps that run by a special rule:
-- **alt**: one of the branches runs; the condition of each branch is written in the frame;
+A frame with a label in its upper-left corner groups steps that follow a special rule:
+- **alt**: only one of the branches runs; each branch shows its condition;
 - **opt**: the steps run only if the condition is met;
 - **loop**: the steps repeat;
 - **par**: the steps run in parallel.
 :::
 
 ::: note
-A step crossed out in red disagrees with the system diagram:
-- **relationship removed**: the relationship the step used no longer exists;
-- **no reply expected**: the step describes a reply, but the relationship has become asynchronous and expects no reply.
+A step crossed out in red no longer matches the system diagram:
+- **relationship removed**: the relationship that the step used no longer exists;
+- **no reply expected**: the step is a response, but the relationship is now asynchronous and doesn't expect one.
 :::
 
 ::: note
-The **scope** label next to the process name shows within which part of the system the process is described. **Whole diagram** means that the process covers the entire project.
+The **scope** label next to the process name shows which part of the system the process covers. **Whole diagram** means that it covers the entire project.
 :::
 
 ::: note
-If planned or deprecated objects take part in the process, an **As is** / **Transition** / **To be** switch appears above the diagram (see [View planned system changes](changes.md)).
+If the process involves planned or deprecated objects, an **As is** / **Transition** / **To be** switch appears above the diagram (see [View planned changes](changes.md)).
 :::

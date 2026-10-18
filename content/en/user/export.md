@@ -4,24 +4,24 @@ order: 14
 ---
 
 ::: note
-Export downloads the project's knowledge (for example, to pass the diagram to an AI agent or to keep a copy). Export is available to everyone who has access to the project, including readers.
+Export lets you download a project's knowledge, for example, to give the diagram to an AI agent or to keep a copy. Anyone with access to the project can export it, including readers.
 :::
 
-## Export the diagram to YAML
+## Export the diagram as YAML
 
-To export the diagram to YAML, follow these steps:
+To export the diagram as YAML, follow these steps:
 
-1. Open the page you need:
+1. Open the page you want to export:
     - the project page, to export the diagram of the whole project;
-    - an object page, to export the object together with all its components.
-2. In the upper-right corner, click the **Diagram actions** button (three dots). A menu opens.
-3. In the menu, select **Export diagram** (on an object page, the item is called **Export subtree**). A window with the YAML text opens.
-4. In the window, click **Copy**. The text is copied to the clipboard.
+    - an object page, to export the object with all of its components.
+2. Click **Diagram actions** (the three dots) in the upper-right corner. A menu opens.
+3. Select **Export diagram** (on an object page, **Export subtree**). A window with the YAML opens.
+4. Click **Copy**. The YAML is copied to the clipboard.
 
-![Diagram actions menu](../images/export-menu.png "Diagram actions menu on the project page")
+![Diagram actions menu](../images/export-menu.png "The Diagram actions menu on the project page")
 
 ::: note
-The YAML contains the objects (name, type, role, technology, description, source) and the relationships between them. It has no logic diagrams, specifications, facts, or processes: they are in the project archive.
+The YAML includes the objects (name, type, role, technology, description, and source) and the relationships between them. It doesn't include logic diagrams, specifications, database structures, channels, configuration, or processes: these are in the project archive.
 :::
 
 ## Download the project archive
@@ -29,15 +29,15 @@ The YAML contains the objects (name, type, role, technology, description, source
 To download the project archive, follow these steps:
 
 1. Open the project page.
-2. In the upper-right corner, click the **Diagram actions** button.
-3. In the menu, select **Export project (zip)**. The browser downloads the archive.
+2. Click **Diagram actions** in the upper-right corner.
+3. Select **Export project (zip)**. Your browser downloads the archive.
 
 ::: note
-The archive contains all the project's knowledge: the diagram, logic diagrams, OpenAPI specifications, database structures, broker channels, configuration, and business processes. The **Export project (zip)** item is available only on the project page.
+The archive contains everything in the project: the diagram, logic diagrams, OpenAPI specifications, database structures, broker channels, configuration, and business processes. **Export project (zip)** is available only on the project page.
 :::
 
 ::: note
-An architect can restore the project in ArchMap from the archive.
+An architect can restore the project from the archive in ArchMap.
 :::
 
 ## Export a business process to Mermaid
@@ -45,6 +45,6 @@ An architect can restore the project in ArchMap from the archive.
 To export a business process, follow these steps:
 
 1. Open the process (see [View a business process](processes.md)).
-2. In the upper-right corner, click the **Diagram actions** button.
-3. In the menu, select **Export process “…” (Mermaid)**. A window with the diagram text in Mermaid notation opens.
-4. In the window, click **Copy**.
+2. Click **Diagram actions** in the upper-right corner.
+3. Select **Export process “…” (Mermaid)**. A window opens with the diagram in Mermaid syntax.
+4. Click **Copy**.

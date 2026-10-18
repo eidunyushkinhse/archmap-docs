@@ -1,45 +1,45 @@
 ---
-title: View planned system changes
+title: View planned changes
 order: 12
 ---
 
 ::: note
-An architect sets an object's status: **Existing**, **Planned** (the object will appear), or **Deprecated** (the object will be taken out of service). Based on these statuses, the diagram shows the system as it is now, after the changes, and the transition between them.
+Architects assign each object a status: **Existing**, **Planned** (to be added), or **Deprecated** (to be retired). Based on these statuses, the diagram can show the system as it is today, as it will be after the changes, and the transition between the two.
 :::
 
-## Find out an object's status
+## Check an object's status
 
-To find out whether an object is affected by planned changes, follow these steps:
+To check whether an object is affected by planned changes, follow these steps:
 
-1. On the diagram, find an object with a label above its name:
+1. On the diagram, look for objects with a label above their name:
     - a green object labeled **new** is planned;
-    - a red object labeled **deprecated** is being taken out of service.
-2. Open the object page. In the **Properties** section, the **Status** row shows its status.
+    - a red object labeled **deprecated** is being retired.
+2. Open the object page. The **Status** row in the **Properties** section shows the object's status.
 
 ::: note
-The relationships of a planned object are green on the diagram, and those of a deprecated object are red.
+Relationships of planned objects are shown in green, and those of deprecated objects in red.
 :::
 
 ## Switch the diagram view
 
 To see the system before or after the changes, follow these steps:
 
-1. Above the diagram on the project, object, or process page, select a view:
-    - **As is**: what works now, including deprecated objects;
-    - **Transition**: all objects at once; this view is selected by default;
-    - **To be**: the target system without deprecated objects.
-2. Look at the diagram. Objects that are not part of the selected view stay in place but become pale.
+1. Above the diagram on a project, object, or process page, select a view:
+    - **As is**: what's running today, including deprecated objects;
+    - **Transition** (default): all objects;
+    - **To be**: the target state, without deprecated objects.
+2. Review the diagram. Objects that aren't part of the selected view stay in place but are dimmed.
 
-![Transition view](../images/changes-transition.png "Components of the Notification Service in the Transition view: SMS Sender is deprecated")
+![Transition view](../images/changes-transition.png "Notification Service components in the Transition view: SMS Sender is deprecated")
 
 ::: note
 The view switch appears only if the project has planned or deprecated objects.
 :::
 
 ::: note
-In a business process, the view likewise dims the steps whose participants are not part of the selected view.
+In business processes, steps whose participants aren't part of the selected view are dimmed as well.
 :::
 
 ::: note
-The selected view is remembered separately for each project in this browser.
+ArchMap remembers the selected view for each project in your browser.
 :::

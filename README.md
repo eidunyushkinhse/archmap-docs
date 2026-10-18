@@ -223,6 +223,14 @@ Warning, Caution) и страница 404. Ссылки между языкам�
 | `нажмите кнопку **X**` | `click **X**` |
 | `наведите курсор на …` | `hover over …` |
 
+Формулы фиксированы, остальной текст — не калька с русского: передаётся смысл, а не
+формулировки, и страница пишется так, как писалась бы с нуля для англоязычного читателя, в стиле
+англоязычной технической документации («Click the diagram to make it interactive», а не
+«Activate the diagram. To do this, click it»; «Search results don't show where an object is in the
+tree», а не «The list of results does not show where an object is in the tree»). Заголовки
+страниц — тоже по-английски естественные: «View service configuration», «Find a service's
+source code». Читатели в английском тексте — viewers; MCP — «via MCP».
+
 Безличные и страдательные обороты о действиях читателя и в английском не используются:
 «You can add relationships in the diagram editor», а не «Relationships are added in the editor».
 

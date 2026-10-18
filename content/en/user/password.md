@@ -7,23 +7,23 @@ order: 17
 
 To change your password, follow these steps:
 
-1. In the upper-right corner of any page, click the profile circle. The profile menu opens.
-2. In the menu, select **Change password**. The **Change password** window opens.
-3. In the **Current password** field, enter your current password.
-4. In the **New password** and **Repeat new password** fields, enter the new password. It must be at least 8 characters long.
-5. Click **Change**. The message **Password changed** appears.
+1. Click your profile icon in the upper-right corner of any page. The profile menu opens.
+2. Select **Change password**. The **Change password** window opens.
+3. Enter your current password in the **Current password** field.
+4. Enter a new password in the **New password** and **Repeat new password** fields. It must be at least 8 characters long.
+5. Click **Change**. The **Password changed** message appears.
 6. Click **Done**.
 
-![Change password window](../images/password-dialog.png "Change password window")
+![Change password window](../images/password-dialog.png "The Change password window")
 
 ::: note
-Your current session continues: you will need the new password the next time you sign in.
+You stay signed in. You'll need the new password the next time you sign in.
 :::
 
 ::: note
-If you have forgotten your password, ask an ArchMap administrator to set a new one.
+If you've forgotten your password, ask your ArchMap administrator to set a new one.
 :::
 
 ::: note
-On the demo site, a guest has no profile menu and cannot change the password.
+Guests on the demo site don't have a profile menu and can't change the password.
 :::

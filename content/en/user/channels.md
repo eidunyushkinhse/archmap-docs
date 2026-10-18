@@ -4,27 +4,27 @@ order: 8
 ---
 
 ::: note
-Message broker channels are linked to logic diagrams through the “publishes” and “consumes” markers in diagram steps (see [View the logic of an operation or worker](logic.md)). Based on these markers, the **Channels** section shows which services and diagrams publish messages to a channel and consume them.
+Message broker channels are linked to logic diagrams by the “publishes” and “consumes” markers in diagram steps (see [View operation and worker logic](logic.md)). Using these markers, the **Channels** section shows which services and diagrams publish to and consume from each channel.
 :::
 
 ## View a channel
 
-To view the channels of a message broker, follow these steps:
+To view a message broker's channels, follow these steps:
 
-1. Open the message broker page (see [Find a service's documentation](find-service.md)) and scroll to the **Channels** section.
-2. In the **Channels** section, expand a channel. To do this, click the arrow to the left of its name. The delivery parameters, message fields, and the **Publishers / consumers** list appear.
-3. In the **Publishers / consumers** list, find the services and their logic diagrams that publish messages to the channel or consume them.
+1. Open the broker page (see [Find service documentation](find-service.md)) and scroll down to the **Channels** section.
+2. Click the arrow next to a channel name to expand it. The delivery settings, message fields, and the **Publishers / consumers** list appear.
+3. In the **Publishers / consumers** list, see which services and logic diagrams publish to the channel or consume from it.
 
-![Channels section](../images/facts-channels.png "Channels section of the Kafka broker: the orders.events channel is expanded")
+![Channels section](../images/facts-channels.png "The Channels section of the Kafka broker with the orders.events channel expanded")
 
 ::: note
-A channel in ArchMap is what each broker calls in its own way: a topic in Kafka, a queue or exchange in RabbitMQ, a stream in Redis, a subject in NATS. The kind of channel is shown to the right of its name.
+In ArchMap, a channel is whatever your broker calls it: a topic in Kafka, a queue or exchange in RabbitMQ, a stream in Redis, or a subject in NATS. The channel type is shown to the right of its name.
 :::
 
 ::: note
-The rows of the **Publishers / consumers** list do not open logic diagrams. A diagram opens on the service page in the **Logic** section (see [View the logic of an operation or worker](logic.md)).
+Rows in the **Publishers / consumers** list don't link to logic diagrams. To open a diagram, use the **Logic** section on the service page (see [View operation and worker logic](logic.md)).
 :::
 
 ::: note
-If the section says **No channels documented**, the broker's channels have not been documented in the project yet.
+**No channels documented** means that the broker's channels haven't been documented in the project yet.
 :::

@@ -1,30 +1,30 @@
 ---
-title: View a database structure
+title: View database structure
 order: 7
 ---
 
 ::: note
-Database tables are linked to logic diagrams through the “reads” and “writes” markers in diagram steps (see [View the logic of an operation or worker](logic.md)). Based on these markers, the **Structure** section shows which services and diagrams access a table.
+Database tables are linked to logic diagrams by the “reads” and “writes” markers in diagram steps (see [View operation and worker logic](logic.md)). Using these markers, the **Structure** section shows which services and diagrams access each table.
 :::
 
 ## View a table
 
-To view a database structure, follow these steps:
+To view a database's structure, follow these steps:
 
-1. Open the database page (see [Find a service's documentation](find-service.md)) and scroll to the **Structure** section.
-2. In the **Structure** section, expand a table. To do this, click the arrow to the left of its name. The table's columns and the **Accessed by** list appear.
-3. In the **Accessed by** list, find the row with the table or column you need. The row shows the service and its logic diagram that read or write the table.
+1. Open the database page (see [Find service documentation](find-service.md)) and scroll down to the **Structure** section.
+2. Click the arrow next to a table name to expand it. The table's columns and the **Accessed by** list appear.
+3. In the **Accessed by** list, find the table or column you're interested in. Each row shows the service and the logic diagram that read or write it.
 
-![Structure section](../images/facts-db.png "Structure section of the Orders DB database: the orders table is expanded")
+![Structure section](../images/facts-db.png "The Structure section of Orders DB with the orders table expanded")
 
 ::: note
-The **Show diagram** button shows the relationships between tables as an ER diagram. Click the diagram, and it opens in full screen.
+Click **Show diagram** to see how the tables are related in an ER diagram. Click the diagram to open it in full screen.
 :::
 
 ::: note
-The rows of the **Accessed by** list do not open logic diagrams. A diagram opens on the service page in the **Logic** section (see [View the logic of an operation or worker](logic.md)).
+Rows in the **Accessed by** list don't link to logic diagrams. To open a diagram, use the **Logic** section on the service page (see [View operation and worker logic](logic.md)).
 :::
 
 ::: note
-If the section says **No tables documented**, the database structure has not been documented in the project yet.
+**No tables documented** means that the database structure hasn't been documented in the project yet.
 :::

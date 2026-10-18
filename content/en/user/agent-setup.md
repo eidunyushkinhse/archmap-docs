@@ -4,20 +4,20 @@ order: 15
 ---
 
 ::: note
-An AI agent (Claude Code, Claude Desktop, or another agent with MCP support) works with ArchMap through the MCP server. The server runs on your computer next to the agent and accesses ArchMap on behalf of your account. To install it, you need git and Python 3.11 or later.
+An AI agent (Claude Code, Claude Desktop, or any other agent that supports MCP) works with ArchMap through the ArchMap MCP server. The server runs on your computer alongside the agent and connects to ArchMap with your account. To install it, you need git and Python 3.11 or later.
 :::
 
 ## Install the MCP server
 
 To install the MCP server, follow these steps:
 
-1. Download the ArchMap repository:
+1. Clone the ArchMap repository:
 
     ```bash
     git clone https://github.com/eidunyushkinhse/archmap.git
     ```
 
-2. Go to the `archmap/mcp` folder and install the server's dependencies:
+2. Go to the `archmap/mcp` directory and install the server's dependencies:
 
     ```bash
     cd archmap/mcp
@@ -26,30 +26,30 @@ To install the MCP server, follow these steps:
     ```
 
 ::: note
-On Windows, create the virtual environment with `python -m venv venv` and install the dependencies with `venv\Scripts\pip install -r requirements.txt`.
+On Windows, create the virtual environment with `python -m venv venv`, and then install the dependencies with `venv\Scripts\pip install -r requirements.txt`.
 :::
 
-## Specify your account
+## Configure your account
 
-To specify your account, follow these steps:
+To configure your account, follow these steps:
 
-1. In the `mcp` folder, copy the `.env.example` file to `.env`.
-2. In the `.env` file, fill in the parameters:
-    - `ARCHMAP_URL`: the address at which ArchMap opens in the browser, without a path (for example, `https://archmap.example.com`);
+1. In the `mcp` directory, copy `.env.example` to `.env`.
+2. In `.env`, set the following parameters:
+    - `ARCHMAP_URL`: the address you use to open ArchMap in your browser, without a path (for example, `https://archmap.example.com`);
     - `ARCHMAP_USERNAME` and `ARCHMAP_PASSWORD`: your ArchMap username and password.
 
 ::: note
-The `.env` file is not tracked by git. Do not put the password in the agent's configuration: its file may end up in a repository.
+Git ignores the `.env` file. Don't put your password in the agent's configuration: that file may end up in a repository.
 :::
 
 ## Connect the server to the agent
 
 To connect the MCP server to the agent, follow these steps:
 
-1. Open the agent's MCP server configuration file:
-    - for Claude Code, it is the `.mcp.json` file in the folder from which you start the agent;
-    - for Claude Desktop, it is the `claude_desktop_config.json` file.
-2. Add the `archmap` server to the file. Replace `/path/to/archmap/mcp` with the full path to the `mcp` folder:
+1. Open the agent's MCP configuration file:
+    - for Claude Code, `.mcp.json` in the directory where you start the agent;
+    - for Claude Desktop, `claude_desktop_config.json`.
+2. Add the `archmap` server to the file, replacing `/path/to/archmap/mcp` with the full path to the `mcp` directory:
 
     ```json
     {
@@ -65,21 +65,21 @@ To connect the MCP server to the agent, follow these steps:
     }
     ```
 
-3. Restart the agent. If the agent asks for permission to start the `archmap` server, allow it.
-4. Check the connection. To do this, ask the agent to show the list of ArchMap projects. The agent replies with the projects available to your account and your role in each.
+3. Restart the agent. If it asks for permission to start the `archmap` server, allow it.
+4. To check the connection, ask the agent to list your ArchMap projects. It replies with the projects available to your account and your role in each.
 
 ::: note
-On Windows, in the `command` parameter, specify the path to `venv\Scripts\python.exe`.
+On Windows, set `command` to the path to `venv\Scripts\python.exe`.
 :::
 
 ::: note
-If ArchMap is served over HTTPS with a certificate from an internal certificate authority, add the `SSL_CERT_FILE` parameter with the path to the root certificate file (for example, `/etc/ssl/certs/ca-certificates.crt`) to the `env` block. If network access goes through a proxy, add the ArchMap address to the `NO_PROXY` parameter in the same block.
+If ArchMap uses HTTPS with a certificate issued by an internal certificate authority, add `SSL_CERT_FILE` with the path to the root certificate file (for example, `/etc/ssl/certs/ca-certificates.crt`) to the `env` block. If you connect through a proxy, add the ArchMap address to `NO_PROXY` in the same block.
 :::
 
 ::: note
-The agent sees in ArchMap the same things as your account. With the reader role, the agent changes nothing in the project: ArchMap rejects an edit attempt with **Insufficient permissions**.
+The agent has the same access in ArchMap as your account. If you're a reader, the agent can't change anything in the project: ArchMap rejects any edit with **Insufficient permissions**.
 :::
 
 ::: note
-You cannot connect an agent to the demo site: signing in with a username and password is disabled there.
+You can't connect an agent to the demo site: signing in with a username and password is disabled there.
 :::

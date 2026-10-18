@@ -2,9 +2,9 @@
 title: User guide
 short: User
 order: 1
-description: How to read diagrams, move between levels, open object pages, and find what you need.
+description: Learn how to read diagrams, navigate between levels, open object pages, and find the information you need.
 ---
 
-This guide is for those who open ArchMap to understand a system: developers, analysts, testers, and new team members. Reading requires no special permissions; the project only needs to be visible to you: the owner has added you as a member or opened the project to all users.
+This guide is for anyone who uses ArchMap to understand a system: developers, analysts, QA engineers, and new team members. You don't need special permissions to read diagrams, only access to the project: either the owner has added you as a member, or the project is visible to all users.
 
-If you are going to build and edit diagrams, continue with the architect guide after this one (it is available in Russian for now).
+If you plan to create and edit diagrams, read the architect guide next (currently available in Russian only).
