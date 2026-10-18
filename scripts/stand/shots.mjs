@@ -207,6 +207,39 @@ if (what === "projects") {
   await dlg.locator("#cp-old").waitFor();
   await page.waitForTimeout(400);
   await snap(dlg, file ?? "password.png");
+} else if (what === "tokens") {
+  // Окно «Токены для MCP» (DOCS_USER=architect): tokens "<Проект>" <окно.png> <выпущен.png> —
+  // в списке заранее выпущенный токен «Ноутбук» (только чтение), затем выпуск токена по
+  // умолчанию. В кадре вместо секрета и адреса стенда — образцы; токены съёмки отзываются.
+  const [, , listFile, issuedFile] = process.argv.slice(2);
+  const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const mine = async () => (await fetch(`${BACKEND}/api/v1/tokens`, { headers: auth })).json();
+  const revokeAll = async () => { for (const t of await mine()) await fetch(`${BACKEND}/api/v1/tokens/${t.id}`, { method: "DELETE", headers: auth }); };
+  await revokeAll();
+  const pre = await fetch(`${BACKEND}/api/v1/tokens`, { method: "POST", headers: auth, body: JSON.stringify({ name: EN ? "Laptop" : "Ноутбук", read_only: true, lifetime_days: 90 }) });
+  if (!pre.ok) throw new Error(`выпуск токена: ${pre.status}`);
+  await page.goto(`${FRONTEND}/#/projects`);
+  await page.locator('button[aria-label="Профиль"]').click();
+  await page.getByText("Токены для MCP", { exact: true }).click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.locator("#tok-name").waitFor();
+  await dlg.locator('[data-testid^="token-"]').first().waitFor();
+  await page.waitForTimeout(400);
+  await snap(dlg, listFile ?? "mcp-tokens.png");
+  await dlg.getByRole("button", { name: "Выпустить токен" }).click();
+  const issued = page.locator("dialog[open]");
+  await issued.locator('[data-testid="issued-secret"]').waitFor();
+  await issued.evaluate((root, origin) => {
+    const secret = root.querySelector('[data-testid="issued-secret"]').textContent;
+    const fake = "archmap_Ab3dEfGh5JkLmN7pQrStUv9WxYz2aBcDeFgHiJkLmNoP";
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      n.nodeValue = n.nodeValue.split(secret).join(fake).split(origin).join("https://archmap.example.com");
+    }
+  }, new URL(FRONTEND).origin);
+  await page.waitForTimeout(400);
+  await snap(issued, issuedFile ?? "mcp-token-issued.png");
+  await revokeAll();
 } else if (what === "process") {
   // Режим «Процессы»: process "<Проект>" "<Имя процесса>" <файл.png> — переключатель
   // «Процессы» в шапке, процесс выбирается в списке слева, кадр — окно целиком.
@@ -274,7 +307,7 @@ if (what === "projects") {
   const clip = process.env.CLIP?.split(",").map(Number);
   await snap(page, file ?? "editor.png", clip ? { clip: { x: clip[0], y: clip[1], width: clip[2], height: clip[3] } } : {});
 } else {
-  throw new Error("что снимать: projects | home | node | search | section | doc | process | export | password | create | editor");
+  throw new Error("что снимать: projects | home | node | search | section | doc | process | export | password | tokens | create | editor");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
