@@ -22,7 +22,6 @@ order: 14
 | --- | --- | --- |
 | `DATABASE_URL` | — | Адрес базы PostgreSQL (например, `postgresql://archmap:ПАРОЛЬ@pg.example.com:5432/archmap`). |
 | `SECRET_KEY` | создаётся при установке | Ключ подписи входа, не короче 32 символов. После смены всем придётся войти заново. |
-| `ALLOW_SIGNUP` | `false` | Регистрация через API без администратора. Формы регистрации в интерфейсе нет, оставляйте `false`. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `10080` | Сколько минут действует вход пользователя (по умолчанию 7 дней). |
 | `CORS_ORIGINS` | адрес сервера | Адреса, по которым пользователи открывают ArchMap, через запятую. Нужен, только если интерфейс и API живут на разных адресах. |
 | `TRUST_FORWARDED_FOR` | `true` на сервере и в Kubernetes, `false` в Docker Compose | Брать адрес пользователя из заголовка `X-Forwarded-For`, который дописывает прокси. Без прокси перед ArchMap выключите. |
@@ -63,7 +62,6 @@ order: 14
 | `database.existingSecret`, `database.existingSecretKey` | пусто, `database-url` | Secret с адресом базы и имя ключа в нём. |
 | `secretKey.value` | пусто | Ключ подписи входа. Если значение пустое, чарт создаст случайный ключ и сохранит его при обновлениях. |
 | `secretKey.existingSecret`, `secretKey.existingSecretKey` | пусто, `secret-key` | Secret с ключом подписи и имя ключа в нём. |
-| `config.allowSignup` | `false` | `ALLOW_SIGNUP`. |
 | `config.workers` | `2` | Число рабочих процессов в поде (`WEB_CONCURRENCY`). |
 | `config.loginAttemptsPerMinute` | `10` | `LOGIN_ATTEMPTS_PER_MINUTE`. |
 | `config.maxRequestMb` | `64` | `MAX_REQUEST_MB`. Прокси перед ArchMap должен пропускать запросы не меньше этого размера. |
