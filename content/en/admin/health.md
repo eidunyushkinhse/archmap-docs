@@ -62,7 +62,7 @@ On a server, the installer writes its log only to the terminal. To save it, run 
 
 ### In Kubernetes
 
-- **The pod is in `Init:Error` or `Init:CrashLoopBackOff`**: the init container failed the database check or the migrations. Check its log: `kubectl -n archmap logs <pod> -c migrate`. The line that starts with `БАЗА:` says what to fix.
+- **The pod is in `Init:Error` or `Init:CrashLoopBackOff`**: the init container failed the database check or the migrations. Check its log: `kubectl -n archmap logs <pod> -c migrate`. The message in the log says what to fix.
 - **`ImagePullBackOff`**: the image address is wrong (`image.repository`, `image.tag`), or the namespace has no access to the registry (`imagePullSecrets`).
 - **`CreateContainerConfigError`**: the Secret from `database.existingSecret` doesn't exist, or its key has a different name than `database.existingSecretKey`.
 

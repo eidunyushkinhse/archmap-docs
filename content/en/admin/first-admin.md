@@ -34,7 +34,7 @@ To create the first administrator, follow these steps:
 3. Open ArchMap in your browser and sign in with this username and password.
 
 ::: note
-The password must be at least 8 characters long and no longer than 72 bytes (72 Latin characters; non-Latin characters, such as Cyrillic, take two bytes each). You enter the password only in the console, so it doesn't stay in the command history.
+The password must be at least 8 characters long and no longer than 72 bytes (72 Latin characters; other characters can take two or more bytes each). You enter the password only in the console, so it doesn't stay in the command history.
 :::
 
 ::: note
