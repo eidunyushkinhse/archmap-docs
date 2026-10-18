@@ -224,9 +224,11 @@ if (what === "projects") {
   const dlg = page.locator("dialog[open]");
   await dlg.locator("#tok-name").waitFor();
   await dlg.locator('[data-testid^="token-"]').first().waitFor();
+  // Значение поля domPass не переводит: имя по умолчанию «Агент» — по словарю
+  if (EN) await dlg.locator("#tok-name").fill(D("Агент"));
   await page.waitForTimeout(400);
   await snap(dlg, listFile ?? "mcp-tokens.png");
-  await dlg.getByRole("button", { name: "Выпустить токен" }).click();
+  await dlg.getByRole("button", { name: D("Выпустить токен") }).click();
   const issued = page.locator("dialog[open]");
   await issued.locator('[data-testid="issued-secret"]').waitFor();
   await issued.evaluate((root, origin) => {
@@ -262,7 +264,7 @@ if (what === "projects") {
   await page.getByRole("button", { name: "Новый проект" }).click();
   const dlg = page.locator("dialog[open]");
   await dlg.getByRole("button", { name: "Копия", exact: true }).click();
-  await dlg.locator(".cp-row", { hasText: project.name }).click();
+  await dlg.locator(".cp-row", { hasText: D(project.name) }).click();
   await dlg.getByPlaceholder("Например, «Платёжная платформа»").fill(title ?? "Черновик");
   await page.waitForTimeout(400);
   await snap(dlg, file ?? "create-project.png");
