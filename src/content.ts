@@ -189,11 +189,21 @@ export function loadSite(root: string, lang: Lang = "ru"): Site {
   return { lang, home, guides, pages, byFile };
 }
 
-// Сайты всех языков: русский всегда, английский — если есть папка content/en/
-export function loadSites(root: string): Site[] {
+// Сайты всех языков: русский всегда, английский — если есть папка content/en/ и язык не
+// исключён списком langs (DOCS_LANGS на стенде: английская версия лежит в репозитории, но на
+// сайт не выкладывается, пока не вычитана).
+export function loadSites(root: string, langs: readonly Lang[] = ["ru", "en"]): Site[] {
   const sites = [loadSite(root, "ru")];
-  if (existsSync(join(root, LANG_DIR.en))) sites.push(loadSite(root, "en"));
+  if (langs.includes("en") && existsSync(join(root, LANG_DIR.en))) sites.push(loadSite(root, "en"));
   return sites;
+}
+
+// Языки сайта из переменной DOCS_LANGS («ru» или «ru,en»); не задана — все, что есть в content/.
+export function langsFromEnv(value: string | undefined): Lang[] | undefined {
+  if (!value?.trim()) return undefined;
+  const wanted = value.split(",").map((s) => s.trim());
+  const known: Lang[] = ["ru", "en"];
+  return known.filter((l) => wanted.includes(l));
 }
 
 export interface Validation {

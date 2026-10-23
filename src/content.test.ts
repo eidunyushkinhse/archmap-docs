@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { flattenNav, listFragments, listMarkdown, loadSite, loadSites, makeReader, navPath, validateSite } from "./content.ts";
+import { flattenNav, langsFromEnv, listFragments, listMarkdown, loadSite, loadSites, makeReader, navPath, validateSite } from "./content.ts";
 import { createRenderer } from "./markdown.ts";
 
 function tree(files: Record<string, string>): string {
@@ -96,6 +96,15 @@ describe("языки", () => {
     assert.deepEqual(en.guides.map((g) => [g.key, g.short, g.index.url]), [["user", "User", "/en/user/"]]);
     assert.deepEqual(flattenNav(en.guides[0].nav).map((p) => p.url), ["/en/user/a/", "/en/user/b/"]);
     assert.ok(en.pages.every((p) => p.lang === "en"));
+  });
+
+  it("список языков без en — английский сайт не строится, хотя папка en/ есть", () => {
+    assert.deepEqual(loadSites(root, ["ru"]).map((s) => s.lang), ["ru"]);
+    assert.deepEqual(langsFromEnv("ru"), ["ru"]);
+    assert.deepEqual(langsFromEnv(" ru, en "), ["ru", "en"]);
+    assert.deepEqual(langsFromEnv("en,xx"), ["en"]);
+    assert.equal(langsFromEnv(undefined), undefined);
+    assert.equal(langsFromEnv("  "), undefined);
   });
 
   it("ссылка на страницу другого языка — ошибка с подсказкой", () => {

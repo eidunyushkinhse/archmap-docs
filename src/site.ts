@@ -20,12 +20,12 @@ export interface Prepared {
 // Читает content/, рендерит все страницы всех языков, проверяет ссылки. Ошибки содержимого
 // собираются в список (страница с ошибкой рендерится плашкой); структурная ошибка (нет
 // index.md, страница без названия) — исключение DocsError.
-export function prepareSite(contentDir: string): Prepared {
+export function prepareSite(contentDir: string, langs?: readonly Lang[]): Prepared {
   const errors: string[] = [];
   const warnings: string[] = [];
   const assets = new Set<string>();
   const included = new Set<string>();
-  const sites = loadSites(contentDir);
+  const sites = loadSites(contentDir, langs);
   for (const site of sites) {
     const renderer = createRenderer(makeReader(contentDir), site.lang);
     for (const p of site.pages) {

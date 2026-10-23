@@ -14,7 +14,7 @@ import {
   AUTHOR_COOKIE, SESSION_COOKIE, SESSION_TTL_S, hashPassword, issueToken, loadAuthConfig, parseCookies,
   RateLimiter, verifyPassword, verifyToken, type AuthConfig,
 } from "./auth.ts";
-import { LANG_DIR, langOf, makeReader } from "./content.ts";
+import { LANG_DIR, langOf, langsFromEnv, makeReader } from "./content.ts";
 import { fmNumber, fmString, splitFrontMatter } from "./frontmatter.ts";
 import { createAutoCommitter, disabledCommitter, type AutoCommitter, type CommitInfo, type GitOptions, type GitStatus } from "./git.ts";
 import { createRenderer, DocsError, pageUrl } from "./markdown.ts";
@@ -33,6 +33,8 @@ export interface ServerOptions {
   dev?: boolean;
   auth?: AuthConfig;
   trustProxy?: boolean;   // адрес клиента и схема — из X-Forwarded-* (за nginx)
+  // Языки сайта (DOCS_LANGS): не задано — все, что есть в content/
+  langs?: readonly Lang[];
   quiet?: boolean;
   // Автокоммит правок через API: по умолчанию — автоопределение рабочей копии по contentDir;
   // false — выключен
@@ -212,7 +214,7 @@ export async function startServer(opts: ServerOptions): Promise<DocsServer> {
 
   const rebuild = (): RebuildResult => {
     try {
-      const next = prepareSite(opts.contentDir);
+      const next = prepareSite(opts.contentDir, opts.langs);
       assets = writeStatic(next, opts.distDir, opts.contentDir, opts.themeDir);
       prepared = next;
       stamp = String(Date.now());
@@ -652,6 +654,7 @@ async function main(): Promise<void> {
     host: values.host ?? process.env.DOCS_HOST ?? "127.0.0.1",
     dev: values.dev,
     trustProxy: process.env.DOCS_TRUST_PROXY === "true",
+    langs: langsFromEnv(process.env.DOCS_LANGS),
     git: process.env.DOCS_GIT_AUTOCOMMIT === "false" ? false : {
       dir: CONTENT_DIR,
       push: process.env.DOCS_GIT_PUSH === "true",

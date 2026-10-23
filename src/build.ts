@@ -6,6 +6,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { langsFromEnv } from "./content.ts";
 import { DocsError } from "./markdown.ts";
 import { CONTENT_DIR, DIST_DIR, THEME_DIR } from "./paths.ts";
 import { fragmentReport, prepareSite, writeStatic } from "./site.ts";
@@ -20,7 +21,7 @@ function main(): void {
   const outDir = resolve(values.out ?? DIST_DIR);
   let prepared;
   try {
-    prepared = prepareSite(CONTENT_DIR);
+    prepared = prepareSite(CONTENT_DIR, langsFromEnv(process.env.DOCS_LANGS));
     writeStatic(prepared, outDir, CONTENT_DIR, THEME_DIR);
   } catch (e) {
     if (!(e instanceof DocsError)) throw e;
