@@ -1,6 +1,6 @@
 ---
 title: Импортировать схему, собранную агентом из кода
-order: 4
+order: 7
 ---
 
 <!--@include: ../_shared/agent-beta.md-->

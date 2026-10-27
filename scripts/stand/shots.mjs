@@ -308,8 +308,137 @@ if (what === "projects") {
   if (kind !== "hover") await page.mouse.move(720, 20);
   const clip = process.env.CLIP?.split(",").map(Number);
   await snap(page, file ?? "editor.png", clip ? { clip: { x: clip[0], y: clip[1], width: clip[2], height: clip[3] } } : {});
+} else if (what === "deploy") {
+  // Схема развёртывания всего проекта: deploy "<Проект>" [файл.png] [labels-off] — режим
+  // «Развёртывание» (адресом /deploy), дерево слева; с labels-off подписи связей скрыты
+  // тумблером «Подписи связей» (зоны площадок читаются целиком); кадр — окно целиком.
+  const [, , file, labels] = process.argv.slice(2);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/deploy`);
+  await page.locator(".dp-stage .react-flow__node").first().waitFor();
+  await settle();
+  if (labels === "labels-off") {
+    const btn = page.locator('button[aria-label="Подписи связей"]');
+    if ((await btn.getAttribute("aria-pressed")) !== "true") await btn.click();
+    await settle();
+  }
+  await page.mouse.move(720, 20);
+  await snap(page, file ?? "deploy-canvas.png");
+} else if (what === "sites") {
+  // Окно «Площадки» (DOCS_USER=architect): sites "<Проект>" <файл.png> ["<Площадка>"] — в
+  // дереве окна раскрыта названная площадка (по умолчанию «Облако»); кадр — окно.
+  const [, , file, open = "Облако"] = process.argv.slice(2);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/deploy`);
+  await page.locator(".dp-stage .react-flow__node").first().waitFor();
+  await settle(300);
+  await page.locator('button[aria-label="Площадки"]').click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.locator(".site-row").first().waitFor();
+  await dlg.locator(`button[aria-label="Развернуть «${D(open)}»"]`).click();
+  await page.waitForTimeout(500);
+  await page.mouse.move(720, 20);
+  await snap(dlg, file ?? "deploy-sites.png");
+} else if (what === "placing") {
+  // Режим размещения щелчком (DOCS_USER=architect): placing "<Проект>" "<Объект>" <файл.png>
+  // ["<Контейнер>"] — булавка на строке объекта в дереве (строка контейнера сначала
+  // раскрывается шевроном), над схемой строка «Куда поставить …». Кадр — окно целиком или
+  // верх CLIP_H (CSS-пиксели); режим отменяется Escape, ничего не сохраняет.
+  const [, , nodeName, file, parentName] = process.argv.slice(2);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/deploy`);
+  await page.locator(".dp-stage .react-flow__node").first().waitFor();
+  await settle();
+  const rowOf = (name) => page.locator(".nt-row", { has: page.locator(".nt-name", { hasText: D(name) }) }).first();
+  if (parentName) {
+    const chev = rowOf(parentName).locator('button[aria-label="Развернуть ветку"]');
+    if (await chev.count()) { await chev.click(); await page.waitForTimeout(500); }
+  }
+  const row = rowOf(nodeName);
+  await row.hover();
+  await row.locator("button.nt-place").click();
+  await page.locator(".dp-placing").waitFor();
+  await page.waitForTimeout(600);
+  await page.mouse.move(720, 20);
+  const clipH = Number(process.env.CLIP_H) || 0;
+  await snap(page, file ?? "deploy-placing.png", clipH ? { clip: { x: 0, y: 0, width: 1440, height: clipH } } : {});
+  await page.keyboard.press("Escape");
+} else if (what === "placement") {
+  // Окно «Размещение» для нескольких объектов (DOCS_USER=architect): placement "<Проект>"
+  // <файл.png> "<Объект>" "<Объект>"… — карточки выделяются Ctrl-щелчком (первая карточка
+  // каждого объекта), кнопка «Указать размещение» на панели выделения; кадр — окно.
+  // Ничего не применяет.
+  const [, , file, ...names] = process.argv.slice(2);
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
+  await page.goto(`${FRONTEND}/#/p/${project.id}/deploy`);
+  await page.locator(".dp-stage .react-flow__node").first().waitFor();
+  await settle();
+  for (const name of names) {
+    const node = all.find((n) => n.name === name);
+    if (!node) throw new Error(`объект «${name}» не найден`);
+    await page.locator(`.react-flow__node[data-id^="deploy:${node.id}@"]`).first().click({ modifiers: ["Control"] });
+    await page.waitForTimeout(250);
+  }
+  await page.locator(".dp-selection").getByRole("button", { name: "Указать размещение" }).click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.locator(".site-row").first().waitFor();
+  await page.waitForTimeout(500);
+  await page.mouse.move(720, 20);
+  await snap(dlg, file ?? "deploy-placement.png");
+} else if (what === "status") {
+  // Пилюля статуса страницы (DOCS_USER=architect — у листа список значений): status "<Проект>"
+  // "<Объект>" <файл.png> — пилюля у имени раскрыта; кадр — знак объекта, имя, пилюля и список.
+  const [, , nodeName, file] = process.argv.slice(2);
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
+  const node = all.find((n) => n.name === nodeName);
+  if (!node) throw new Error(`объект «${nodeName}» не найден`);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
+  const pill = page.locator("button.np-approval");
+  await pill.waitFor();
+  await settle(300);
+  await pill.click();
+  const menu = page.locator(".np-approval-menu");
+  await menu.waitFor();
+  await page.waitForTimeout(400);
+  await page.mouse.move(720, 20);
+  const boxes = await Promise.all([page.locator(".np-glyph").first(), pill, menu].map((l) => l.boundingBox()));
+  const x0 = Math.min(...boxes.map((b) => b.x)) - 24, y0 = Math.min(...boxes.map((b) => b.y)) - 16;
+  const x1 = Math.max(...boxes.map((b) => b.x + b.width)) + 24, y1 = Math.max(...boxes.map((b) => b.y + b.height)) + 16;
+  await snap(page, file ?? "status-pill.png", { clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } });
+} else if (what === "versions") {
+  // Панель «Версии документации» (DOCS_USER=architect — со строкой «Зафиксировать версию»):
+  // versions "<Проект>" "<Объект>" <файл.png> [N [restore]] — ⋯-меню страницы объекта →
+  // «Версии документации», кадр — панель; с N открыт экран версии vN; с restore — окно
+  // «Восстановить версию N?» (кадр — оно, не подтверждается).
+  const [, , nodeName, file, num, restore] = process.argv.slice(2);
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
+  const node = all.find((n) => n.name === nodeName);
+  if (!node) throw new Error(`объект «${nodeName}» не найден`);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
+  const menuBtn = page.locator("button.np-menu-btn");
+  await menuBtn.waitFor();
+  await settle(300);
+  await menuBtn.click();
+  await page.locator(".np-dropdown").getByRole("button", { name: "Версии документации" }).click();
+  const dlg = page.locator("dialog[open]").first();
+  await dlg.locator(".vp-row").first().waitFor();
+  await page.waitForTimeout(400);
+  if (num) {
+    await dlg.locator(".vp-row").filter({ has: page.locator(".vp-row-n", { hasText: new RegExp(`^v${num}$`) }) }).first().click();
+    await dlg.locator(".vp-irow").first().waitFor();
+    await page.waitForTimeout(500);
+  }
+  await page.mouse.move(720, 20);
+  if (num && restore) {
+    await dlg.getByRole("button", { name: "Восстановить эту версию" }).click();
+    // Окно подтверждения — соседний <dialog> (вложенных не бывает), последний открытый
+    const confirm = page.locator("dialog[open]", { hasText: "Восстановить версию" }).last();
+    await confirm.waitFor();
+    await page.waitForTimeout(400);
+    await snap(confirm, file ?? "versions-restore.png");
+    await page.keyboard.press("Escape");
+  } else {
+    await snap(dlg, file ?? (num ? "versions-diff.png" : "versions-list.png"));
+  }
 } else {
-  throw new Error("что снимать: projects | home | node | search | section | doc | process | export | password | tokens | create | editor");
+  throw new Error("что снимать: projects | home | node | search | section | doc | process | export | password | tokens | create | editor | deploy | sites | placing | placement | status | versions");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();

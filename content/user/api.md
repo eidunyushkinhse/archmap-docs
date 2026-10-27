@@ -1,6 +1,6 @@
 ---
 title: Просмотреть API сервиса
-order: 6
+order: 7
 ---
 
 ::: note

@@ -1,6 +1,6 @@
 ---
 title: Документировать систему с помощью ИИ-агента
-order: 6
+order: 9
 ---
 
 <!--@include: ../_shared/agent-beta.md-->
