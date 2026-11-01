@@ -437,8 +437,53 @@ if (what === "projects") {
   } else {
     await snap(dlg, file ?? (num ? "versions-diff.png" : "versions-list.png"));
   }
+} else if (what === "new-node") {
+  // Окно «Новый объект» из дерева редактора (DOCS_USER=architect): new-node "<Проект>" "<Уровень>"
+  // "<Объект>" <файл.png> [open] — уровень открыт в редакторе схемы, на строке объекта в дереве
+  // нажат «+»; с open раскрыт список поля «Тип» (серые пункты — типы, невозможные здесь). Кадр —
+  // окно; окно закрывается без создания.
+  const [, , levelName, nodeName, file, open] = process.argv.slice(2);
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
+  const level = all.find((n) => n.name === levelName);
+  if (!level) throw new Error(`объект «${levelName}» не найден`);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/map/${level.id}`);
+  await page.locator(".react-flow__node").first().waitFor();
+  await settle(300);
+  // Строка уровня в дереве свёрнута — ветка раскрывается шевроном, чтобы объект был виден
+  const rowOf = (name) => page.locator(".nt-row", { has: page.locator(".nt-name", { hasText: D(name) }) }).first();
+  const chev = rowOf(levelName).locator('button[aria-label="Развернуть ветку"]');
+  if (await chev.count()) { await chev.click(); await page.waitForTimeout(500); }
+  const row = rowOf(nodeName);
+  await row.hover();
+  await row.locator("button.nt-add-child").click();
+  const dlg = page.locator("dialog[open]");
+  const field = dlg.locator("button.ts-trigger");
+  await field.waitFor();
+  if (open) {
+    await field.click();
+    await dlg.locator(".ts-menu").waitFor();
+  }
+  await page.waitForTimeout(500);
+  await snap(dlg, file ?? "node-new.png");
+  if (open) await page.keyboard.press("Escape");
+  await dlg.getByRole("button", { name: D("Закрыть") }).first().click();
+} else if (what === "legend") {
+  // Легенда схемы на странице проекта: legend "<Проект>" <файл.png> — кнопка «Легенда» в углу
+  // схемы, кадр — раскрытая панель.
+  const [, , file] = process.argv.slice(2);
+  await page.goto(`${FRONTEND}/#/p/${project.id}`);
+  await page.getByText("Схема системы").waitFor();
+  await settle(300);
+  await page.locator('button[title="Легенда схемы"]').first().click();
+  const panel = page.locator(".sleg-panel").first();
+  await panel.waitFor();
+  // Панель выше холста встроенной схемы (не больше 680 px), и холст обрезает её верх вместе с
+  // разделом «Типы объектов» (находка продукта 2026-11-01). На время кадра обрезка снята.
+  await page.locator(".esb-wrap").first().evaluate((e) => { e.style.overflow = "visible"; });
+  await page.waitForTimeout(400);
+  await snap(panel, file ?? "legend-types.png");
 } else {
-  throw new Error("что снимать: projects | home | node | search | section | doc | process | export | password | tokens | create | editor | deploy | sites | placing | placement | status | versions");
+  throw new Error("что снимать: projects | home | node | search | section | doc | process | export | password | tokens | create | editor | deploy | sites | placing | placement | status | versions | new-node | legend");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
