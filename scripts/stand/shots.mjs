@@ -90,9 +90,11 @@ if (what === "projects") {
   await page.mouse.move(720, 20);
   await snap(page, "project-home.png");
 } else if (what === "node") {
-  // Страница объекта: node "<Проект>" "<Имя объекта>" [expand] → object-page.png;
-  // с expand — объект раскрыт лупой, кадр — карточка «Схема» (object-page-expanded.png).
-  const [, , nodeName, expand] = process.argv.slice(2);
+  // Страница объекта: node "<Проект>" "<Имя объекта>" [expand [<файл.png>]] → object-page.png;
+  // с expand — объект раскрыт лупой, кадр — карточка «Схема» (object-page-expanded.png или
+  // <файл.png>). Вид схемы — по умолчанию «Переход»: на «Сервисе уведомлений», где
+  // SMS-рассыльщик выводится, этот кадр — changes-transition.png.
+  const [, , nodeName, expand, file] = process.argv.slice(2);
   const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
   const node = all.find((n) => n.name === nodeName);
   if (!node) throw new Error(`объект «${nodeName}» не найден`);
@@ -114,7 +116,7 @@ if (what === "projects") {
     await card.evaluate((e) => { const sc = e.closest(".np-page"); if (sc) sc.scrollTop += e.getBoundingClientRect().top - 24; });
     await page.waitForTimeout(500);
     await page.mouse.move(720, 20);
-    await snap(card, "object-page-expanded.png");
+    await snap(card, file ?? "object-page-expanded.png");
   }
 } else if (what === "search") {
   // Поиск по имени в дереве: search "<Проект>" "<запрос>" → tree-search.png (кадр левой панели)
