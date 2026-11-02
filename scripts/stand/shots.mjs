@@ -122,7 +122,7 @@ if (what === "projects") {
   // Поиск по имени в дереве: search "<Проект>" "<запрос>" → tree-search.png (кадр левой панели)
   const [, , query] = process.argv.slice(2);
   await page.goto(`${FRONTEND}/#/p/${project.id}`);
-  const box = page.getByPlaceholder("Поиск по имени…");
+  const box = page.getByPlaceholder("Поиск по имени", { exact: true });
   await box.waitFor();
   await box.fill(query ?? (EN ? "order" : "заказ"));
   await page.locator(".nt-row--clickable").first().waitFor();
@@ -133,13 +133,19 @@ if (what === "projects") {
 } else if (what === "section") {
   // Раздел страницы объекта: section "<Проект>" "<Имя объекта>" "<Заголовок раздела>" <файл.png> [запись]
   // — раздел прокручивается к верху страницы, кадр — только он; с «записью» (имя таблицы
-  // или канала) она сначала раскрывается шевроном.
+  // или канала) она сначала раскрывается шевроном. Заголовок сворачиваемого раздела несёт
+  // счётчик («Связи · 12»), поэтому он сравнивается по началу. Одноимённые объекты
+  // различаются родителем: "<Родитель> / <Имя объекта>". CLIP_H — только верх раздела
+  // (CSS-пиксели), если весь он не нужен.
   const [, , nodeName, title, file, item] = process.argv.slice(2);
   const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
-  const node = all.find((n) => n.name === nodeName);
+  const [parentName, ownName] = nodeName.includes(" / ") ? nodeName.split(" / ").slice(-2) : [null, nodeName];
+  const node = all.find((n) => n.name === ownName
+    && (parentName === null || all.find((x) => x.id === n.parent_id)?.name === parentName));
   if (!node) throw new Error(`объект «${nodeName}» не найден`);
   await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
-  const card = page.locator(`.np-card:has(h3:text-is("${title}"))`).first();
+  const esc = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const card = page.locator(".np-card").filter({ has: page.locator("h3", { hasText: new RegExp(`^${esc}(\\s*·.*)?$`) }) }).first();
   await card.waitFor();
   await settle();
   if (item) {
@@ -149,15 +155,25 @@ if (what === "projects") {
   }
   // Раздел выше окна: шапка страницы закрыла бы его верх, а прокрутка .np-page обрезала
   // бы низ — окно вытягивается под раздел.
+  const clipH = Number(process.env.CLIP_H) || 0;
   const h = (await card.boundingBox()).height;
-  if (h > 800) {
+  if (h > 800 && !clipH) {
     await page.setViewportSize({ width: 1440, height: Math.ceil(h) + 160 });
     await page.waitForTimeout(400);
   }
-  await card.evaluate((e) => { const sc = e.closest(".np-page"); if (sc) sc.scrollTop += e.getBoundingClientRect().top - 24; });
+  // С CLIP_H раздел встаёт под шапку страницы (отступ от верха прокрутки), а не под край окна
+  await card.evaluate((e, below) => {
+    const sc = e.closest(".np-page");
+    if (sc) sc.scrollTop += e.getBoundingClientRect().top - (below ? sc.getBoundingClientRect().top : 0) - 24;
+  }, clipH > 0);
   await page.waitForTimeout(500);
   await page.mouse.move(720, 20);
-  await snap(card, file ?? "section.png");
+  if (clipH) {
+    const cb = await card.boundingBox();
+    await snap(page, file ?? "section.png", { clip: { x: cb.x, y: cb.y, width: cb.width, height: Math.min(clipH, cb.height) } });
+  } else {
+    await snap(card, file ?? "section.png");
+  }
 } else if (what === "doc") {
   // Окно схемы логики / спеки: doc "<Проект>" "<Имя объекта>" "<Имя схемы>" <файл.png> [spec|spec-open]
   // — кнопка «Открыть схему «…»» (или «Открыть спецификацию «…»») на странице объекта, кадр — окно.
