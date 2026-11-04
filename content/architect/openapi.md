@@ -1,6 +1,6 @@
 ---
 title: Добавить спецификацию OpenAPI сервиса
-order: 14
+order: 15
 ---
 
 ::: note
