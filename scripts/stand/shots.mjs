@@ -341,6 +341,94 @@ if (what === "projects") {
   } finally {
     await revokeAll();
   }
+} else if (what === "ci-token") {
+  // Окно «Токен выпущен» у токена «Только сигнал из CI» (DOCS_USER=architect): ci-token
+  // "<Проект>" <файл.png> — меню профиля → «Токены для MCP», «Доступ»: «Только сигнал из CI»,
+  // «Выпустить токен»; открыта первая вкладка (GitLab). В кадре вместо секрета и адреса
+  // стенда — образцы; выпущенный токен отзывается.
+  const [, , file] = process.argv.slice(2);
+  const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const mine = async () => (await fetch(`${BACKEND}/api/v1/tokens`, { headers: auth })).json();
+  const before = new Set((await mine()).map((t) => t.id));
+  await page.goto(`${FRONTEND}/#/projects`);
+  await page.locator('button[aria-label="Профиль"]').click();
+  await page.getByText(D("Токены для MCP"), { exact: true }).click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.locator("#tok-name").waitFor();
+  await dlg.locator("#tok-access").selectOption("ci");
+  await dlg.getByRole("button", { name: D("Выпустить токен") }).click();
+  try {
+    await snapIssued(file ?? "ci-token-issued.png");
+  } finally {
+    for (const t of await mine()) {
+      if (!before.has(t.id)) await fetch(`${BACKEND}/api/v1/tokens/${t.id}`, { method: "DELETE", headers: auth });
+    }
+  }
+} else if (what === "code-change") {
+  // Строка «Документацию пора обновить» под шапкой проекта (DOCS_USER=architect — строку видит
+  // редактор): code-change "<Проект>" <файл.png> [<репозиторий>] — выпускается токен «Только
+  // сигнал из CI», от него трижды идёт сигнал о слиянии в main (POST /code-changes), страница
+  // проекта открывается со строкой напоминания. Кадр — верх окна во всю ширину (CLIP_H, по
+  // умолчанию 360 CSS-пикселей). После кадра напоминание снимается (DELETE /code-changes/{id})
+  // и токен отзывается.
+  const [, , file, repo = "https://github.com/yarmarka/orders"] = process.argv.slice(2);
+  const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const inProject = { ...auth, "X-Project-Id": project.id };
+  const changes = async () => (await (await fetch(`${BACKEND}/api/v1/nodes/alerts`, { headers: inProject })).json()).code_changes ?? [];
+  const dismissAll = async () => {
+    for (const c of await changes()) {
+      const r = await fetch(`${BACKEND}/api/v1/code-changes/${c.id}`, { method: "DELETE", headers: inProject });
+      if (!r.ok) throw new Error(`снять напоминание: ${r.status}`);
+    }
+  };
+  // Остаток прошлого прогона снимается: в кадре ровно три слияния
+  await dismissAll();
+  const issued = await fetch(`${BACKEND}/api/v1/tokens`, { method: "POST", headers: auth, body: JSON.stringify({ name: "CI съёмки", ci_only: true }) });
+  if (!issued.ok) throw new Error(`выпуск токена CI: ${issued.status}`);
+  const ci = await issued.json();
+  try {
+    // Хэши коммитов постоянные: кадр от прогона к прогону не меняется
+    for (const commit of ["a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", "b2c3d4e5f60718293a4b5c6d7e8f901234567890", "c3d4e5f60718293a4b5c6d7e8f90123456789012"]) {
+      const r = await fetch(`${BACKEND}/api/v1/code-changes`, {
+        method: "POST", headers: { Authorization: `Bearer ${ci.secret}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ repo, commit, branch: "main" }),
+      });
+      if (!r.ok) throw new Error(`сигнал CI: ${r.status}`);
+    }
+    await page.goto(`${FRONTEND}/#/p/${project.id}`);
+    await page.locator('[data-testid="code-change-notice"]').waitFor();
+    await section("Схема").waitFor();
+    await settle();
+    await page.mouse.move(720, 600);
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await snap(page, file ?? "code-change-notice.png", { clip: { x: 0, y: 0, width: 1440, height: Number(process.env.CLIP_H) || 360 } });
+  } finally {
+    await dismissAll();
+    await fetch(`${BACKEND}/api/v1/tokens/${ci.token.id}`, { method: "DELETE", headers: auth });
+  }
+} else if (what === "fullscreen") {
+  // Схема на всё окно у читателя: fullscreen "<Проект>" <файл.png> "<Объект>" — на странице
+  // проекта в строке заголовка «Схема» кнопка «Развернуть», на схеме двойным щелчком выбран
+  // объект: справа его панель. Схема вписывается в часть холста, которую панель не закрывает.
+  // Кадр — окно целиком.
+  const [, , file, nodeName] = process.argv.slice(2);
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
+  const node = all.find((n) => n.name === nodeName);
+  if (!node) throw new Error(`объект «${nodeName}» не найден`);
+  await page.goto(`${FRONTEND}/#/p/${project.id}`);
+  const sec = section("Схема");
+  await sec.waitFor();
+  await settle(300);
+  await sec.getByRole("button", { name: D("Развернуть"), exact: true }).click();
+  const el = page.locator(`.react-flow__node[data-id="${node.id}"]`);
+  await el.waitFor();
+  await settle();
+  await el.dblclick();
+  await page.waitForTimeout(800);
+  await page.locator(".react-flow__controls-fitview").first().click();
+  await settle();
+  await page.mouse.move(720, 20);
+  await snap(page, file ?? "schema-fullscreen-reader.png");
 } else if (what === "process") {
   // Режим «Процессы»: process "<Проект>" "<Имя процесса>" <файл.png> — вкладка «Процессы» в
   // шапке проекта, процесс выбирается в списке слева, кадр — окно целиком.
@@ -621,7 +709,7 @@ if (what === "projects") {
   await page.mouse.move(720, 20);
   await snap(panel, file ?? "legend-types.png");
 } else {
-  throw new Error("что снимать: projects | home | node | search | section | head | doc | process | export | password | tokens | create | editor | deploy | sites | placing | placement | status | versions | new-node | legend");
+  throw new Error("что снимать: projects | home | node | search | section | head | doc | process | export | password | tokens | ci-token | code-change | fullscreen | create | editor | deploy | sites | placing | placement | status | versions | new-node | legend");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
