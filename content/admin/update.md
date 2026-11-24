@@ -1,6 +1,6 @@
 ---
 title: Обновить ArchMap до новой версии
-order: 9
+order: 10
 ---
 
 ::: note
