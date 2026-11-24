@@ -364,17 +364,19 @@ if (what === "projects") {
   await page.getByRole("button", { name: "Новый проект" }).click();
   const dlg = page.locator("dialog[open]");
   await dlg.getByRole("button", { name: "Копия", exact: true }).click();
-  await dlg.locator(".cp-row", { hasText: D(project.name) }).click();
-  await dlg.getByPlaceholder("Например, «Платёжная платформа»").fill(title ?? "Черновик");
+  await dlg.locator(".cp-source", { hasText: D(project.name) }).click();
+  await dlg.getByPlaceholder("например: Платёжная платформа").fill(title ?? "Черновик");
   await page.waitForTimeout(400);
+  await page.mouse.move(720, 20);
   await snap(dlg, file ?? "create-project.png");
 } else if (what === "editor") {
   // Редактор схемы (DOCS_USER=architect): editor "<Проект>" "<Уровень>" <файл.png> [node "<Объект>" |
-  // edge "<Откуда>" "<Куда>" | hover "<Объект>"] — уровень контейнера; node — панель свойств объекта
-  // (двойной клик), edge — панель связи (двойной клик по её плашке), hover — стрелки по сторонам
-  // объекта под указателем (SIDE=right|left|top|bottom — указатель на стрелке этой стороны:
-  // пунктир быстрой связи). Кадр — окно целиком или CLIP="x,y,w,h" (CSS-пиксели). Ничего не
-  // сохраняет.
+  // edge "<Откуда>" "<Куда>" | hover "<Объект>" ["<Сосед>"]] — уровень контейнера; node — панель
+  // объекта (двойной клик), edge — панель связи (двойной клик по её плашке); с панелью схема
+  // вписывается в видимую часть холста. hover — стрелки по сторонам объекта под указателем
+  // (SIDE=right|left|top|bottom — указатель на стрелке этой стороны: пунктир быстрой связи), с
+  // соседом кадр — оба объекта с полем вокруг. Кадр — окно целиком или CLIP="x,y,w,h"
+  // (CSS-пиксели). Ничего не сохраняет.
   const [, , levelName, file, kind, a, b] = process.argv.slice(2);
   const hdr = { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } };
   const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, hdr)).json();
@@ -405,8 +407,23 @@ if (what === "projects") {
     await page.locator(`[data-lg-edge="${edge.id}"]`).first().dblclick();
   }
   await page.waitForTimeout(800);
+  // Правая панель ложится поверх холста и закрывает край схемы: схема вписывается в то, что
+  // осталось видно (кнопка «Вписать» в углу холста; вид схемы в базе не меняется)
+  if (kind === "node" || kind === "edge") {
+    await page.locator(".react-flow__controls-fitview").first().click();
+    await settle();
+  }
   if (kind !== "hover") await page.mouse.move(720, 20);
-  const clip = process.env.CLIP?.split(",").map(Number);
+  let clip = process.env.CLIP?.split(",").map(Number);
+  // hover с объектом «Куда» (b) без CLIP: кадр — оба объекта с полем вокруг (стрелки по
+  // сторонам наведённого объекта и пунктир до соседа)
+  if (!clip && kind === "hover" && b) {
+    const r1 = await page.locator(`.react-flow__node[data-id="${byName(a).id}"]`).boundingBox();
+    const r2 = await page.locator(`.react-flow__node[data-id="${byName(b).id}"]`).boundingBox();
+    const x0 = Math.min(r1.x, r2.x) - 56, y0 = Math.min(r1.y, r2.y) - 56;
+    const x1 = Math.max(r1.x + r1.width, r2.x + r2.width) + 56, y1 = Math.max(r1.y + r1.height, r2.y + r2.height) + 56;
+    clip = [x0, y0, x1 - x0, y1 - y0].map(Math.round);
+  }
   await snap(page, file ?? "editor.png", clip ? { clip: { x: clip[0], y: clip[1], width: clip[2], height: clip[3] } } : {});
 } else if (what === "deploy") {
   // Схема развёртывания всего проекта: deploy "<Проект>" [файл.png] [labels-off] — режим
@@ -483,25 +500,47 @@ if (what === "projects") {
   await page.mouse.move(720, 20);
   await snap(dlg, file ?? "deploy-placement.png");
 } else if (what === "status") {
-  // Пилюля статуса страницы (DOCS_USER=architect — у листа список значений): status "<Проект>"
-  // "<Объект>" <файл.png> — пилюля у имени раскрыта; кадр — знак объекта, имя, пилюля и список.
-  const [, , nodeName, file] = process.argv.slice(2);
-  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
-  const node = all.find((n) => n.name === nodeName);
-  if (!node) throw new Error(`объект «${nodeName}» не найден`);
-  await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
-  const pill = page.locator("button.np-approval");
-  await pill.waitFor();
-  await settle(300);
-  await pill.click();
-  const menu = page.locator(".np-approval-menu");
-  await menu.waitFor();
-  await page.waitForTimeout(400);
-  await page.mouse.move(720, 20);
-  const boxes = await Promise.all([page.locator(".np-glyph").first(), pill, menu].map((l) => l.boundingBox()));
-  const x0 = Math.min(...boxes.map((b) => b.x)) - 24, y0 = Math.min(...boxes.map((b) => b.y)) - 16;
-  const x1 = Math.max(...boxes.map((b) => b.x + b.width)) + 24, y1 = Math.max(...boxes.map((b) => b.y + b.height)) + 16;
-  await snap(page, file ?? "status-pill.png", { clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } });
+  // Статус страницы (DOCS_USER=architect — у объекта список значений, у системы список
+  // вложенных объектов): status "<Проект>" "<Объект>" <файл.png> ["<Согласованный>"…] — статус
+  // справа от имени раскрыт; кадр — строка имени со статусом и список. Названные после файла
+  // объекты на время кадра получают статус «Согласовано» (PATCH approval), после кадра
+  // статус возвращается к «В работе».
+  const [, , nodeName, file, ...approved] = process.argv.slice(2);
+  const hdr = { Authorization: `Bearer ${token}`, "X-Project-Id": project.id, "Content-Type": "application/json" };
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: hdr })).json();
+  const byName = (n) => { const x = all.find((y) => y.name === n); if (!x) throw new Error(`объект «${n}» не найден`); return x; };
+  const node = byName(nodeName);
+  const setApproval = async (name, approval) => {
+    const r = await fetch(`${BACKEND}/api/v1/nodes/${byName(name).id}`, { method: "PATCH", headers: hdr, body: JSON.stringify({ approval }) });
+    if (!r.ok) throw new Error(`статус «${name}»: ${r.status}`);
+  };
+  try {
+    for (const n of approved) await setApproval(n, "approved");
+    await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
+    const pill = page.locator("button.np-approval");
+    await pill.waitFor();
+    await settle(300);
+    await pill.click();
+    const menu = page.locator(".np-approval-menu");
+    await menu.locator(".np-approval-row").first().waitFor();
+    await page.waitForTimeout(400);
+    await page.mouse.move(720, 20);
+    const boxes = await Promise.all([page.locator(".np-header").first(), pill, menu].map((l) => l.boundingBox()));
+    const x0 = Math.min(...boxes.map((b) => b.x)) - 24, y0 = Math.min(...boxes.map((b) => b.y)) - 16;
+    const x1 = Math.max(...boxes.map((b) => b.x + b.width)) + 24;
+    // Низ кадра — под списком; строка свойств, которую он режет, входит в кадр целиком
+    const y1 = await page.evaluate((edge) => {
+      let y = edge;
+      for (const e of document.querySelectorAll(".np-prop")) {
+        const r = e.getBoundingClientRect();
+        if (r.top < y && r.bottom > y) y = r.bottom + 8;
+      }
+      return y;
+    }, Math.max(...boxes.slice(1).map((b) => b.y + b.height)) + 12);
+    await snap(page, file ?? "status-pill.png", { clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } });
+  } finally {
+    for (const n of approved) await setApproval(n, "in_progress");
+  }
 } else if (what === "versions") {
   // Панель «Версии документации» (DOCS_USER=architect — со строкой «Зафиксировать версию»):
   // versions "<Проект>" "<Объект>" <файл.png> [N [restore]] — ⋯-меню страницы объекта →
