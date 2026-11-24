@@ -2,6 +2,7 @@
 // DOCS_USER/DOCS_PASS), окно 1440×900, deviceScaleFactor 2, светлая тема, ru-RU.
 //   node shots.mjs projects            → projects-list.png (экран «Проекты»)
 //   node shots.mjs home "Маркетплейс «Ярмарка»" → project-home.png (страница проекта)
+// Все снимки сайта одной командой, по строке на снимок: all.sh рядом.
 // Файлы кладутся в OUT (по умолчанию content/images репозитория документации).
 // DOCS_LANG=en — английский «прототип» тех же окон в content/en/images (см. en.mjs):
 // имена из данных в аргументах — по-русски, как в базе стенда.
@@ -53,9 +54,15 @@ async function snap(target, file, opts = {}) {
     report(file, apiMiss, await domPass(page, dict));
     await page.waitForTimeout(300);
   }
-  await el.screenshot({ path: join(OUT, file), animations: "disabled", caret: "hide", ...opts });
+  // Элемент снимается кадром страницы по его рамке: снимок самого элемента у окон верхнего
+  // слоя (<dialog>) съезжал на несколько пикселей и цеплял страницу под окном.
+  const clip = el === page ? null : await el.boundingBox();
+  await page.screenshot({ path: join(OUT, file), animations: "disabled", caret: "hide", ...(clip ? { clip } : {}), ...opts });
   console.log(file);
 }
+
+// Раздел страницы проекта или объекта по заголовку («Схема», «Связи», «Конфигурация»…)
+const section = (title) => page.locator(".ds-sec").filter({ has: page.locator("h3.ds-sec-title", { hasText: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }) }).first();
 
 // Оседание раскладки: как в scripts/landing-shots.mjs — сеть тиха, конвейер не в полёте,
 // сигнатура узлов/рёбер стабильна два замера подряд.
@@ -76,6 +83,76 @@ async function settle(extra = 800) {
   await page.waitForTimeout(extra);
 }
 
+// Окно «Токен выпущен»: секрет и адрес стенда в кадре заменяются образцами (репозиторий
+// документации публичный, адрес стенда в кадре не нужен)
+async function snapIssued(file) {
+  const issued = page.locator("dialog[open]");
+  await issued.locator('[data-testid="issued-secret"]').waitFor();
+  await issued.evaluate((root, origin) => {
+    const secret = root.querySelector('[data-testid="issued-secret"]').textContent;
+    const fake = "archmap_Ab3dEfGh5JkLmN7pQrStUv9WxYz2aBcDeFgHiJkLmNoP";
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      n.nodeValue = n.nodeValue.split(secret).join(fake).split(origin).join("https://archmap.example.com");
+    }
+  }, new URL(FRONTEND).origin);
+  await page.waitForTimeout(400);
+  await page.mouse.move(720, 20);
+  await snap(issued, file);
+}
+
+// Кадр блока страницы объекта или проекта (раздел, шапка со свойствами): от верха first до
+// низа last (по умолчанию тот же блок) с полем pad вокруг. У разделов нового интерфейса нет
+// своей рамки, поэтому поле — белый фон страницы. Блок встаёт под верх области прокрутки
+// страницы (.np-page): шапку приложения он не задевает. Если блок с полем не помещается в
+// окно, окно вытягивается под него. clipH — только верх блока (CSS-пиксели).
+async function snapBlock(first, file, { last = first, pad = 24, clipH = 0 } = {}) {
+  // Срез clipH встаёт на нижнюю границу последней строки (строки таблицы, записи, свойства),
+  // которая уместилась целиком: строка пополам в кадр не идёт.
+  const fit = async () => {
+    const a = await first.boundingBox(), b = await last.boundingBox();
+    let h = b.y + b.height - a.y;
+    if (clipH && clipH < h) {
+      h = await last.evaluate((e, [y0, lim]) => {
+        let best = 0;
+        for (const r of e.querySelectorAll("tr, li, .ds-row, .fact-item, .np-prop, .ds-sec-head")) {
+          const bot = r.getBoundingClientRect().bottom - y0;
+          if (bot <= lim && bot > best) best = bot;
+        }
+        return best || lim;
+      }, [a.y, clipH]);
+    }
+    return { a, h };
+  };
+  let { h } = await fit();
+  const top = await first.evaluate((e) => e.closest(".np-page")?.getBoundingClientRect().top ?? 0);
+  if (top + h + 2 * pad + 8 > 900) {
+    await page.setViewportSize({ width: 1440, height: Math.ceil(top + h + 2 * pad + 16) });
+    await page.waitForTimeout(400);
+  }
+  await first.evaluate((e, pad) => {
+    const sc = e.closest(".np-page");
+    if (sc) sc.scrollTop += e.getBoundingClientRect().top - sc.getBoundingClientRect().top - pad - 8;
+  }, pad);
+  await page.waitForTimeout(500);
+  await page.mouse.move(720, 20);
+  await page.evaluate(() => document.activeElement?.blur?.());
+  const r = await fit();
+  // Конец страницы не даёт блоку подняться под верх — окно добирается вниз
+  const vh = page.viewportSize().height;
+  if (r.a.y + r.h + pad > vh) {
+    await page.setViewportSize({ width: 1440, height: Math.ceil(r.a.y + r.h + pad + 8) });
+    await page.waitForTimeout(400);
+  }
+  const { a } = await fit();
+  const b = await last.boundingBox();
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x + a.width, b.x + b.width);
+  // Срезанный блок кончается границей строки: поля снизу нет, иначе в него заглянула бы
+  // следующая строка
+  const cut = clipH && r.h < b.y + b.height - a.y;
+  await snap(page, file, { clip: { x: x0 - pad, y: a.y - pad, width: x1 - x0 + 2 * pad, height: r.h + pad + (cut ? 1 : pad) } });
+}
+
 if (what === "projects") {
   await page.goto(`${FRONTEND}/#/projects`);
   await page.getByRole("heading", { name: "Проекты" }).waitFor();
@@ -85,13 +162,13 @@ if (what === "projects") {
   await snap(page, "projects-list.png");
 } else if (what === "home") {
   await page.goto(`${FRONTEND}/#/p/${project.id}`);
-  await page.getByText("Схема системы").waitFor();
+  await section("Схема").waitFor();
   await settle();
   await page.mouse.move(720, 20);
   await snap(page, "project-home.png");
 } else if (what === "node") {
   // Страница объекта: node "<Проект>" "<Имя объекта>" [expand [<файл.png>]] → object-page.png;
-  // с expand — объект раскрыт лупой, кадр — карточка «Схема» (object-page-expanded.png или
+  // с expand — объект раскрыт лупой, кадр — раздел «Схема» (object-page-expanded.png или
   // <файл.png>). Вид схемы — по умолчанию «Переход»: на «Сервисе уведомлений», где
   // SMS-рассыльщик выводится, этот кадр — changes-transition.png.
   const [, , nodeName, expand, file] = process.argv.slice(2);
@@ -99,7 +176,7 @@ if (what === "projects") {
   const node = all.find((n) => n.name === nodeName);
   if (!node) throw new Error(`объект «${nodeName}» не найден`);
   await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
-  const card = page.locator('.np-card:has(h3:text-is("Схема"))').first();
+  const card = section("Схема");
   await card.waitFor();
   await settle();
   if (!expand) {
@@ -113,10 +190,7 @@ if (what === "projects") {
     await page.waitForTimeout(300);
     await card.locator('button[title="Раскрыть содержимое"]').first().click();
     await settle();
-    await card.evaluate((e) => { const sc = e.closest(".np-page"); if (sc) sc.scrollTop += e.getBoundingClientRect().top - 24; });
-    await page.waitForTimeout(500);
-    await page.mouse.move(720, 20);
-    await snap(card, file ?? "object-page-expanded.png");
+    await snapBlock(card, file ?? "object-page-expanded.png");
   }
 } else if (what === "search") {
   // Поиск по имени в дереве: search "<Проект>" "<запрос>" → tree-search.png (кадр левой панели)
@@ -127,16 +201,20 @@ if (what === "projects") {
   await box.fill(query ?? (EN ? "order" : "заказ"));
   await page.locator(".nt-row--clickable").first().waitFor();
   await page.waitForTimeout(600);
+  // Кольцо фокуса поля в кадр не идёт: запрос и результаты остаются
+  await box.evaluate((e) => e.blur());
+  await page.mouse.move(720, 20);
+  await page.waitForTimeout(300);
   // Панель высокая и почти пустая под результатами — кадр только её верх
   const b = await page.locator("aside").first().boundingBox();
   await snap(page, "tree-search.png", { clip: { x: b.x, y: b.y, width: b.width, height: 300 } });
 } else if (what === "section") {
   // Раздел страницы объекта: section "<Проект>" "<Имя объекта>" "<Заголовок раздела>" <файл.png> [запись]
-  // — раздел прокручивается к верху страницы, кадр — только он; с «записью» (имя таблицы
-  // или канала) она сначала раскрывается шевроном. Заголовок сворачиваемого раздела несёт
-  // счётчик («Связи · 12»), поэтому он сравнивается по началу. Одноимённые объекты
-  // различаются родителем: "<Родитель> / <Имя объекта>". CLIP_H — только верх раздела
-  // (CSS-пиксели), если весь он не нужен.
+  // — раздел прокручивается к верху страницы, кадр — он с полем страницы вокруг (snapBlock);
+  // с «записью» (имя таблицы или канала) она сначала раскрывается шевроном. Заголовок
+  // сравнивается целиком. Одноимённые объекты различаются родителем: "<Родитель> / <Имя
+  // объекта>". CLIP_H — только верх раздела (CSS-пиксели, срез по границе строки), если
+  // весь он не нужен.
   const [, , nodeName, title, file, item] = process.argv.slice(2);
   const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
   const [parentName, ownName] = nodeName.includes(" / ") ? nodeName.split(" / ").slice(-2) : [null, nodeName];
@@ -144,8 +222,7 @@ if (what === "projects") {
     && (parentName === null || all.find((x) => x.id === n.parent_id)?.name === parentName));
   if (!node) throw new Error(`объект «${nodeName}» не найден`);
   await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
-  const esc = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const card = page.locator(".np-card").filter({ has: page.locator("h3", { hasText: new RegExp(`^${esc}(\\s*·.*)?$`) }) }).first();
+  const card = section(title);
   await card.waitFor();
   await settle();
   if (item) {
@@ -153,32 +230,24 @@ if (what === "projects") {
       .locator('button[aria-expanded="false"]').first().click();
     await page.waitForTimeout(600);
   }
-  // Раздел выше окна: шапка страницы закрыла бы его верх, а прокрутка .np-page обрезала
-  // бы низ — окно вытягивается под раздел.
-  const clipH = Number(process.env.CLIP_H) || 0;
-  const h = (await card.boundingBox()).height;
-  if (h > 800 && !clipH) {
-    await page.setViewportSize({ width: 1440, height: Math.ceil(h) + 160 });
-    await page.waitForTimeout(400);
-  }
-  // С CLIP_H раздел встаёт под шапку страницы (отступ от верха прокрутки), а не под край окна
-  await card.evaluate((e, below) => {
-    const sc = e.closest(".np-page");
-    if (sc) sc.scrollTop += e.getBoundingClientRect().top - (below ? sc.getBoundingClientRect().top : 0) - 24;
-  }, clipH > 0);
-  await page.waitForTimeout(500);
-  await page.mouse.move(720, 20);
-  if (clipH) {
-    const cb = await card.boundingBox();
-    await snap(page, file ?? "section.png", { clip: { x: cb.x, y: cb.y, width: cb.width, height: Math.min(clipH, cb.height) } });
-  } else {
-    await snap(card, file ?? "section.png");
-  }
+  await snapBlock(card, file ?? "section.png", { clipH: Number(process.env.CLIP_H) || 0 });
+} else if (what === "head") {
+  // Шапка страницы объекта со свойствами: head "<Проект>" "<Имя объекта>" <файл.png> — путь,
+  // имя, статус, описание и строки свойств под ним (заголовка «Свойства» в интерфейсе нет).
+  const [, , nodeName, file] = process.argv.slice(2);
+  const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
+  const node = all.find((n) => n.name === nodeName);
+  if (!node) throw new Error(`объект «${nodeName}» не найден`);
+  await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
+  const props = page.locator(".np-props");
+  await props.waitFor();
+  await settle(300);
+  await snapBlock(page.locator(".np-header"), file ?? "head.png", { last: props });
 } else if (what === "doc") {
   // Окно схемы логики / спеки: doc "<Проект>" "<Имя объекта>" "<Имя схемы>" <файл.png> [spec|spec-open]
-  // — кнопка «Открыть схему «…»» (или «Открыть спецификацию «…»») на странице объекта, кадр — окно.
-  // Своя спека объекта — имя схемы = имя объекта (строка «Спецификация» раздела OpenAPI);
-  // spec-open — в окне раскрыта первая операция.
+  // — кнопка «Открыть схему «…»» (или «Открыть спецификацию «…»») на странице объекта, кадр — окно;
+  // схема логики вписана в окно целиком. Своя спека объекта — имя схемы = имя объекта (первая
+  // строка раздела OpenAPI); spec-open — в окне раскрыта первая операция.
   const [, , nodeName, docName, file, kind] = process.argv.slice(2);
   const all = await (await fetch(`${BACKEND}/api/v1/nodes/all`, { headers: { Authorization: `Bearer ${token}`, "X-Project-Id": project.id } })).json();
   const node = all.find((n) => n.name === nodeName);
@@ -186,7 +255,7 @@ if (what === "projects") {
   await page.goto(`${FRONTEND}/#/p/${project.id}/nodes/${node.id}`);
   const spec = kind?.startsWith("spec");
   const btn = spec && docName === nodeName
-    ? page.locator('.np-card:has(h3:text-is("OpenAPI")) button.np-doc-row').first()
+    ? section("OpenAPI").locator(".ds-row-main").first()
     : page.locator(`button[title="${spec ? `Открыть спецификацию «${D(docName)}»` : `Открыть схему «${D(docName)}»`}"]`).first();
   await btn.waitFor();
   await settle(300);
@@ -194,27 +263,42 @@ if (what === "projects") {
   const dlg = page.locator("dialog[open]");
   await dlg.locator(spec ? ".opblock-summary" : "svg, pre, .cm-editor").first().waitFor({ timeout: 30000 });
   if (kind === "spec-open") await dlg.locator(".opblock-summary").first().click();
+  // Схема логики открывается в масштабе для чтения и не помещается в окно — кадр показывает
+  // её целиком: кнопка «Вписать» в правом нижнем углу окна
+  if (!spec) {
+    await page.waitForTimeout(800);
+    await dlg.getByRole("button", { name: "Вписать" }).click();
+  }
   await page.waitForTimeout(1500);
   await page.mouse.move(720, 20);
   await snap(dlg, file ?? "doc.png");
 } else if (what === "export") {
-  // Меню «Действия со схемой» на странице проекта: export "<Проект>" <меню.png> <окно.png>
-  // — кадр меню (правый верх) и окно «Экспорт схемы».
+  // Меню «Действия со схемой» на странице проекта: export "<Проект>" <меню.png> [<окно.png>]
+  // — кадр меню (правый верх, с вкладками шапки) и, если названо второе имя, окно «Экспорт схемы».
   const [, , menuFile, dialogFile] = process.argv.slice(2);
   await page.goto(`${FRONTEND}/#/p/${project.id}`);
-  await page.getByText("Схема системы").waitFor();
+  await section("Схема").waitFor();
   await settle(300);
   await page.locator('button[aria-label="Действия со схемой"]').click();
   const menu = page.locator('[role="menu"][aria-label="Действия со схемой"]');
   await menu.waitFor();
   await page.waitForTimeout(300);
+  await page.mouse.move(720, 600);
+  // Кадр — правый верх окна: кнопка меню, профиль и меню целиком. Левый край кадра — правее
+  // названия и описания проекта, чтобы их строки не резались краем.
   const mb = await menu.boundingBox();
-  await snap(page, menuFile ?? "export-menu.png", { clip: { x: mb.x - 260, y: 0, width: mb.width + 280, height: mb.y + mb.height + 20 } });
-  await menu.getByRole("menuitem", { name: EN ? "Export diagram" : "Экспорт схемы" }).click();
-  const dlg = page.locator("dialog[open]");
-  await dlg.locator("pre").waitFor({ timeout: 30000 });
-  await page.waitForTimeout(500);
-  await snap(dlg, dialogFile ?? "export-dialog.png");
+  const textRight = await page.evaluate(() => Math.max(...[...document.querySelectorAll(".np-name, .np-desc")].map((e) => {
+    const r = document.createRange(); r.selectNodeContents(e); return r.getBoundingClientRect().right;
+  })));
+  const x0 = Math.round(Math.max(textRight + 24, mb.x - 200));
+  await snap(page, menuFile ?? "export-menu.png", { clip: { x: x0, y: 0, width: 1440 - x0, height: Math.round(mb.y + mb.height + 24) } });
+  if (dialogFile) {
+    await menu.getByRole("menuitem", { name: EN ? "Export diagram" : "Экспорт схемы" }).click();
+    const dlg = page.locator("dialog[open]");
+    await dlg.locator("pre").waitFor({ timeout: 30000 });
+    await page.waitForTimeout(500);
+    await snap(dlg, dialogFile);
+  }
 } else if (what === "password") {
   // Окно «Сменить пароль» из меню профиля: password "<Проект>" <файл.png>
   const [, , file] = process.argv.slice(2);
@@ -226,49 +310,47 @@ if (what === "projects") {
   await page.waitForTimeout(400);
   await snap(dlg, file ?? "password.png");
 } else if (what === "tokens") {
-  // Окно «Токены для MCP» (DOCS_USER=architect): tokens "<Проект>" <окно.png> <выпущен.png> —
-  // в списке заранее выпущенный токен «Ноутбук» (только чтение), затем выпуск токена по
-  // умолчанию. В кадре вместо секрета и адреса стенда — образцы; токены съёмки отзываются.
-  const [, , listFile, issuedFile] = process.argv.slice(2);
+  // Окно «Токены для MCP»: tokens "<Проект>" <окно.png> <выпущен.png> — в списке заранее
+  // выпущенный токен «Ноутбук» (только чтение), затем выпуск токена по умолчанию. Вместо имени
+  // файла «-» — этот кадр не снимается (по строке на кадр в all.sh). У учётки «Пользователь»
+  // поле «Доступ» заперто на «Только чтение». В кадре вместо секрета и адреса стенда — образцы;
+  // все токены учётки до и после съёмки отзываются.
+  const [, , listFile = "mcp-tokens.png", issuedFile = "mcp-token-issued.png"] = process.argv.slice(2);
   const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   const mine = async () => (await fetch(`${BACKEND}/api/v1/tokens`, { headers: auth })).json();
   const revokeAll = async () => { for (const t of await mine()) await fetch(`${BACKEND}/api/v1/tokens/${t.id}`, { method: "DELETE", headers: auth }); };
   await revokeAll();
-  const pre = await fetch(`${BACKEND}/api/v1/tokens`, { method: "POST", headers: auth, body: JSON.stringify({ name: EN ? "Laptop" : "Ноутбук", read_only: true, lifetime_days: 90 }) });
-  if (!pre.ok) throw new Error(`выпуск токена: ${pre.status}`);
-  await page.goto(`${FRONTEND}/#/projects`);
-  await page.locator('button[aria-label="Профиль"]').click();
-  await page.getByText("Токены для MCP", { exact: true }).click();
-  const dlg = page.locator("dialog[open]");
-  await dlg.locator("#tok-name").waitFor();
-  await dlg.locator('[data-testid^="token-"]').first().waitFor();
-  // Значение поля domPass не переводит: имя по умолчанию «Агент» — по словарю
-  if (EN) await dlg.locator("#tok-name").fill(D("Агент"));
-  await page.waitForTimeout(400);
-  await snap(dlg, listFile ?? "mcp-tokens.png");
-  await dlg.getByRole("button", { name: D("Выпустить токен") }).click();
-  const issued = page.locator("dialog[open]");
-  await issued.locator('[data-testid="issued-secret"]').waitFor();
-  await issued.evaluate((root, origin) => {
-    const secret = root.querySelector('[data-testid="issued-secret"]').textContent;
-    const fake = "archmap_Ab3dEfGh5JkLmN7pQrStUv9WxYz2aBcDeFgHiJkLmNoP";
-    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    for (let n = w.nextNode(); n; n = w.nextNode()) {
-      n.nodeValue = n.nodeValue.split(secret).join(fake).split(origin).join("https://archmap.example.com");
+  try {
+    const pre = await fetch(`${BACKEND}/api/v1/tokens`, { method: "POST", headers: auth, body: JSON.stringify({ name: EN ? "Laptop" : "Ноутбук", read_only: true, lifetime_days: 90 }) });
+    if (!pre.ok) throw new Error(`выпуск токена: ${pre.status}`);
+    await page.goto(`${FRONTEND}/#/projects`);
+    await page.locator('button[aria-label="Профиль"]').click();
+    await page.getByText("Токены для MCP", { exact: true }).click();
+    const dlg = page.locator("dialog[open]");
+    await dlg.locator("#tok-name").waitFor();
+    await dlg.locator('[data-testid^="token-"]').first().waitFor();
+    // Значение поля domPass не переводит: имя по умолчанию «Агент» — по словарю
+    if (EN) await dlg.locator("#tok-name").fill(D("Агент"));
+    await page.waitForTimeout(400);
+    await page.mouse.move(720, 20);
+    if (listFile !== "-") await snap(dlg, listFile);
+    if (issuedFile !== "-") {
+      await dlg.getByRole("button", { name: D("Выпустить токен") }).click();
+      await snapIssued(issuedFile);
     }
-  }, new URL(FRONTEND).origin);
-  await page.waitForTimeout(400);
-  await snap(issued, issuedFile ?? "mcp-token-issued.png");
-  await revokeAll();
+  } finally {
+    await revokeAll();
+  }
 } else if (what === "process") {
-  // Режим «Процессы»: process "<Проект>" "<Имя процесса>" <файл.png> — переключатель
-  // «Процессы» в шапке, процесс выбирается в списке слева, кадр — окно целиком.
+  // Режим «Процессы»: process "<Проект>" "<Имя процесса>" <файл.png> — вкладка «Процессы» в
+  // шапке проекта, процесс выбирается в списке слева, кадр — окно целиком.
   const [, , procName, file] = process.argv.slice(2);
   await page.goto(`${FRONTEND}/#/p/${project.id}`);
-  await page.locator('button[title="Бизнес-процессы"]').click();
-  await page.locator(".bp-procrow", { hasText: D(procName) }).first().click();
+  await section("Схема").waitFor();
+  await page.getByRole("button", { name: D("Процессы"), exact: true }).first().click(); // вкладка шапки
+  await page.locator(".pr-row", { hasText: D(procName) }).first().click();
   await page.locator('[data-tour="process-diagram"]').waitFor();
-  await page.waitForTimeout(1200);
+  await settle(1200);
   await page.mouse.move(720, 20);
   // CLIP_H — высота кадра сверху (CSS-пиксели), если вся диаграмма не нужна.
   const clipH = Number(process.env.CLIP_H) || 0;
@@ -490,18 +572,17 @@ if (what === "projects") {
   // схемы, кадр — раскрытая панель.
   const [, , file] = process.argv.slice(2);
   await page.goto(`${FRONTEND}/#/p/${project.id}`);
-  await page.getByText("Схема системы").waitFor();
+  await section("Схема").waitFor();
   await settle(300);
   await page.locator('button[title="Легенда схемы"]').first().click();
+  // Панель рисуется поверх страницы (портал в body) и встаёт в окно целиком
   const panel = page.locator(".sleg-panel").first();
   await panel.waitFor();
-  // Панель выше холста встроенной схемы (не больше 680 px), и холст обрезает её верх вместе с
-  // разделом «Типы объектов» (находка продукта 2026-11-01). На время кадра обрезка снята.
-  await page.locator(".esb-wrap").first().evaluate((e) => { e.style.overflow = "visible"; });
   await page.waitForTimeout(400);
+  await page.mouse.move(720, 20);
   await snap(panel, file ?? "legend-types.png");
 } else {
-  throw new Error("что снимать: projects | home | node | search | section | doc | process | export | password | tokens | create | editor | deploy | sites | placing | placement | status | versions | new-node | legend");
+  throw new Error("что снимать: projects | home | node | search | section | head | doc | process | export | password | tokens | create | editor | deploy | sites | placing | placement | status | versions | new-node | legend");
 }
 console.log("ошибки страницы:", errors.length ? errors : "нет");
 await browser.close();
