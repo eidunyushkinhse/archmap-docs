@@ -50,7 +50,7 @@ run facts-db.png               env DOCS_USER=reader node shots.mjs section "$P" 
 run facts-channels.png         env DOCS_USER=reader node shots.mjs section "$P" "Kafka" "Каналы" facts-channels.png orders.events
 run facts-config.png           env DOCS_USER=reader node shots.mjs section "$P" "Order API" "Конфигурация" facts-config.png
 run source-props.png           env DOCS_USER=reader node shots.mjs head "$P" "Order API" source-props.png
-run process-view.png           env DOCS_USER=reader CLIP_H=578 node shots.mjs process "$P" "Оплата заказа" process-view.png
+run process-view.png           env DOCS_USER=reader STEP="webhook" node shots.mjs process "$P" "Оплата заказа" process-view.png
 run changes-transition.png     env DOCS_USER=reader node shots.mjs node "$P" "Сервис уведомлений" expand changes-transition.png
 run deploy-canvas.png          env DOCS_USER=reader node shots.mjs deploy "$P" deploy-canvas.png labels-off
 run versions-list-reader.png   env DOCS_USER=reader node shots.mjs versions "$P" "Заказы" versions-list-reader.png

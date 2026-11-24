@@ -431,7 +431,8 @@ if (what === "projects") {
   await snap(page, file ?? "schema-fullscreen-reader.png");
 } else if (what === "process") {
   // Режим «Процессы»: process "<Проект>" "<Имя процесса>" <файл.png> — вкладка «Процессы» в
-  // шапке проекта, процесс выбирается в списке слева, кадр — окно целиком.
+  // шапке проекта, процесс выбирается в списке слева, кадр — окно целиком. STEP="<подпись
+  // шага>" — шаг выбран нажатием на подпись, справа открыты его свойства.
   const [, , procName, file] = process.argv.slice(2);
   await page.goto(`${FRONTEND}/#/p/${project.id}`);
   await section("Схема").waitFor();
@@ -439,6 +440,11 @@ if (what === "projects") {
   await page.locator(".pr-row", { hasText: D(procName) }).first().click();
   await page.locator('[data-tour="process-diagram"]').waitFor();
   await settle(1200);
+  if (process.env.STEP) {
+    await page.locator(".seq-text", { hasText: D(process.env.STEP) }).first().click();
+    await page.getByText(D("Откуда"), { exact: true }).first().waitFor();
+    await page.waitForTimeout(400);
+  }
   await page.mouse.move(720, 20);
   // CLIP_H — высота кадра сверху (CSS-пиксели), если вся диаграмма не нужна.
   const clipH = Number(process.env.CLIP_H) || 0;
