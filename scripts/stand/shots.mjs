@@ -546,11 +546,17 @@ if (what === "projects") {
   // Режим размещения щелчком (DOCS_USER=architect): placing "<Проект>" "<Объект>" <файл.png>
   // ["<Контейнер>"] — булавка на строке объекта в дереве (строка контейнера сначала
   // раскрывается шевроном), над схемой строка «Куда поставить …». Кадр — окно целиком или
-  // верх CLIP_H (CSS-пиксели); режим отменяется Escape, ничего не сохраняет.
+  // верх CLIP_H (CSS-пиксели); LABELS=off скрывает подписи связей (в режиме размещения они
+  // ложатся на блоки и мешают читать полосу и зоны); режим отменяется Escape, ничего не сохраняет.
   const [, , nodeName, file, parentName] = process.argv.slice(2);
   await page.goto(`${FRONTEND}/#/p/${project.id}/deploy`);
   await page.locator(".dp-stage .react-flow__node").first().waitFor();
   await settle();
+  if (process.env.LABELS === "off") {
+    const btn = page.locator('button[aria-label="Подписи связей"]');
+    if ((await btn.getAttribute("aria-pressed")) !== "true") await btn.click();
+    await settle();
+  }
   const rowOf = (name) => page.locator(".nt-row", { has: page.locator(".nt-name", { hasText: D(name) }) }).first();
   if (parentName) {
     const chev = rowOf(parentName).locator('button[aria-label="Развернуть ветку"]');
